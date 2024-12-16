@@ -1,0 +1,13 @@
+<mujocoinclude>
+
+  <asset>
+    <mesh name="gripper_base_link" file="SL_Assets/gripper_base_link.STL"  scale="1 1 1"/>
+    <mesh name="gripper_base_1" file="SL_Assets/gripper_base_1.STL"  scale="1 1 1"/>
+    <mesh name="motor" file="SL_Assets/motor.STL" scale="1 1 1" />
+    <mesh name="track" file="SL_Assets/track.STL"  scale="1 1 1"/>
+    <mesh name="left_finger" file="SL_Assets/left_finger.STL"  scale="1 1 1"/>
+    <mesh name="right_finger" file="SL_Assets/right_finger.STL"  scale="1 1 1"/>
+
+  </asset>
+
+</mujocoinclude>

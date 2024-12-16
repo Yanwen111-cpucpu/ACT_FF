@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="Gripper_sl.SLDASM">
+  <link
+    name="gripper_base_link">
+    <inertial>
+      <origin
+        xyz="4.65548901642729E-08 2.07699093660247E-07 -0.00305111703426376"
+        rpy="0 0 0" />
+      <mass
+        value="0.00992680291756064" />
+      <inertia
+        ixx="2.76373401377601E-06"
+        ixy="9.61601560942167E-17"
+        ixz="1.43920777483183E-12"
+        iyy="2.76373401418272E-06"
+        iyz="1.12259443789081E-12"
+        izz="5.4121499247132E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="gripper_base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="gripper_base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="gripper_base_1">
+    <inertial>
+      <origin
+        xyz="1.04377877868655E-13 -0.000670251081537792 -0.00517769470357479"
+        rpy="0 0 0" />
+      <mass
+        value="0.0114674350711656" />
+      <inertia
+        ixx="2.47933850777464E-06"
+        ixy="1.37680482016218E-17"
+        ixz="-8.91827775823255E-19"
+        iyy="2.21455601318244E-06"
+        iyz="-2.77514858493388E-08"
+        izz="4.49403976650643E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="gripper_base_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="gripper_base_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="gripper_base_1"
+    type="fixed">
+    <origin
+      xyz="0 0 -0.002"
+      rpy="0 0 0" />
+    <parent
+      link="gripper_base_link" />
+    <child
+      link="gripper_base_1" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="motor">
+    <inertial>
+      <origin
+        xyz="5.72458747072346E-17 -6.24500451351651E-17 -0.0190798363949345"
+        rpy="0 0 0" />
+      <mass
+        value="0.0971330540813995" />
+      <inertia
+        ixx="3.1728329248593E-05"
+        ixy="2.20893233455871E-08"
+        ixz="8.37235025880248E-20"
+        iyy="3.16518095879143E-05"
+        iyz="-1.36677546417533E-19"
+        izz="3.95993685941691E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="motor.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="motor.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="motor_joint"
+    type="fixed">
+    <origin
+      xyz="0 0 -0.0125"
+      rpy="0 0 0" />
+    <parent
+      link="gripper_base_1" />
+    <child
+      link="motor" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="track">
+    <inertial>
+      <origin
+        xyz="6.3498933065018E-08 0.00391242876826861 -0.00670865811389305"
+        rpy="0 0 0" />
+      <mass
+        value="0.0294462872017374" />
+      <inertia
+        ixx="6.23243170689493E-06"
+        ixy="-3.31124111591654E-08"
+        ixz="-1.79874565200192E-11"
+        iyy="5.94391838055153E-05"
+        iyz="1.51124077893304E-07"
+        izz="6.48526370978431E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="track.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="track.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="track_joint"
+    type="fixed">
+    <origin
+      xyz="0 -0.0054043 -0.0385"
+      rpy="0 0 0" />
+    <parent
+      link="motor" />
+    <child
+      link="track" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="left_finger">
+    <inertial>
+      <origin
+        xyz="0.00446818556599507 0.000725304388452201 -0.0207766413760557"
+        rpy="0 0 0" />
+      <mass
+        value="0.0235654349828436" />
+      <inertia
+        ixx="1.31532341256544E-05"
+        ixy="6.35660631938774E-08"
+        ixz="1.51248690539334E-06"
+        iyy="9.35764420887573E-06"
+        iyz="-3.51589251978715E-07"
+        izz="5.49378358815034E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="left_finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="left_finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="gripper_left_finger"
+    type="prismatic">
+    <origin
+      xyz="-0.04825 0.0054043 -0.022"
+      rpy="0 0 0" />
+    <parent
+      link="track" />
+    <child
+      link="left_finger" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="right_finger">
+    <inertial>
+      <origin
+        xyz="-0.00446818556599658 -0.000725304388452195 -0.0207766413760557"
+        rpy="0 0 0" />
+      <mass
+        value="0.0235654349828436" />
+      <inertia
+        ixx="1.31532341256545E-05"
+        ixy="6.35660631938769E-08"
+        ixz="-1.51248690539334E-06"
+        iyy="9.35764420887577E-06"
+        iyz="3.51589251978724E-07"
+        izz="5.49378358815034E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="right_finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="right_finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="gripper_right_finger"
+    type="prismatic">
+    <origin
+      xyz="0.04825 0.0054043 -0.022"
+      rpy="0 0 0" />
+    <parent
+      link="track" />
+    <child
+      link="right_finger" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+</robot>

@@ -1,0 +1,65 @@
+<mujocoinclude>
+  
+  <body name="LRMate" pos="0 0 0.33" quat="0.707107 0 0 0.707107">
+    <geom quat="1 0 0 0" type="mesh" mesh="base" name="LRMate/1_base"/>
+    <body name="link_1" pos="0 0 0.">
+      <inertial pos="0.018591 0.0033701 -0.0770907" mass="2.39847" diaginertia="0.023318 0.0193776 0.0139142"/>
+      <joint name="joint_1" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="80" damping="10" />
+      <geom pos="0.05 0 0" quat="0.707107 -0.707107 0 0" type="mesh" rgba="1 1 0 1" mesh="link1"/>
+      <body name="link_2" pos="0.05 0 0" quat="0.707107 -0.707107 0 0">
+        <inertial pos="-0.00710799 -0.132614 0.0247801" quat="0.5 0.5 0.5 0.5" mass="3" diaginertia="0.107037 0.108399 0.0328972"/>
+        <joint name="joint_2" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="10" damping="10"/>
+        <geom pos="0 -0.44 0" quat="0 0.707107 -0.707107 0" type="mesh" rgba="1 1 0 1" mesh="link2"/>
+        <body name="link_3" pos="0 -0.44 0" quat="0 0.707107 -0.707107 0">
+          <inertial pos="0.00579313 -0.00590663 -0.0207324" quat="0.707107 0.707107 0 0" mass="2" diaginertia="0.00810195 0.00798185 0.00686971"/>
+          <joint name="joint_3" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="150" damping="10"/>
+          <geom pos="0.035 0 0" quat="0.707107 -0.707107 0 0" type="mesh" rgba="1 1 0 1" mesh="link3"/>
+          <body name="link_4" pos="0.035 0 0" quat="0.707107 -0.707107 0 0">
+            <inertial pos="-0.000245714 0.00282241 -0.206061" quat="0.5 0.5 -0.5 0.5" mass="2" diaginertia="0.053151 0.0529101 0.00570462"/>
+            <joint name="joint_4" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="150" damping="10"/>
+            <geom pos="0 0 -0.42" quat="0.707107 0.707107 0 0" type="mesh" rgba="1 1 0 1" mesh="link4"/>
+            <body name="link_5" pos="0 0 -0.42" quat="0.707107 0.707107 0 0">
+              <inertial pos="4.8044e-05 -0.027384 -0.00443815" mass="1.70042" diaginertia="0.00247956 0.00243755 0.00120034"/>
+              <joint name="joint_5" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="100" damping="10"/>
+              <geom quat="0.707107 -0.707107 0 0" type="mesh" rgba="1 1 0 1" mesh="link5"/>
+              <body name="link_6" quat="0.707107 -0.707107 0 0">
+                <body name="link_6/camera_focus" pos="0.15 0 0.01">
+                    <site pos="0 0 0" size="0.01" type="sphere" name="left_cam_focus" rgba="0 0 1 0"/>
+                </body>
+                <camera name="left_cam_focus" pos="-0.1 0 0" euler="0 0 0" target="link_6/camera_focus"/>
+                <inertial pos="0.0330067 0 -0.0768635" quat="0.457411 0.539236 0.539236 0.457411" mass="0.981" diaginertia="0.200291 0.200288 0.200058"/>
+                <joint name="joint_6" pos="0 0 0" axis="0 0 1" limited="true" range="-3.14159 3.14159" frictionloss="0.1" damping="30"/>
+                <geom pos="0 0 -0.08" quat="0 1 0 0" type="mesh" rgba="0 0 0 1" mesh="link6"/>
+                <site name="link_6_site" pos="0 0 -0.08" size="0.005" type="sphere" rgba="1 0 0 1"/>
+                
+                <!-- <geom type="sphere" pos="0 0.1 0.05" size="0.05" rgba="1 0 0 1" contype="0" conaffinity="0"/> -->
+                <body name="dummy_reference" pos="0 0 -0.08">
+                  <site name="dummy_site" pos="0 0 0" size="0.005" type="sphere" rgba="1 1 1 0"/>
+                </body>
+                <body name="root" pos="0 0 -0.068" quat="1 0 0 0">
+                  <camera name="gripper_top" pos="0 0.14 0.3" xyaxes="1 0 0 0 1 0"/>
+                  <geom type="mesh"  mesh="gripper_base_link"  group="1"  />
+                  <geom pos="0 0 -0.002" type="mesh"  mesh="gripper_base_1"  group="1"  />
+                  <geom type="mesh" mesh="gripper_base_1" pos="0 0 -0.002" />
+                  <geom pos="0 0 -0.0145" type="mesh"  mesh="motor"  group="1"  />
+                  <geom pos="0 -0.0054043 -0.053" type="mesh"  mesh="track"  group="1"  />
+                  <site name="gripper_spring_site" pos="0 0 0" size="0.005" type="sphere" rgba="0 1 0 1"/>
+                  <body name="left_finger" pos="-0.044 0 -0.075">
+                    <inertial pos="0.00446819 0.000725304 -0.0207766" quat="0.994678 -0.0423708 -0.0938093 -0.00440228" mass="0.0835654" diaginertia="1.34411e-02 9.38816e-03 5.17541e-03" />
+                    <joint name="gripper_left_finger" pos="0 0 0" axis="1 0 0" type="slide" frictionloss="2" limited="true" range="0 0.035" damping="7"/>
+                    <geom type="mesh"  condim="3" solimp="0.9 0.95 0.001" solref="0.02 1" friction="0.5 0.5 0.01" name="finger_left" mesh="left_finger"  group="1"  />
+                  </body>
+                  <body name="right_finger" pos="0.044 0 -0.075">
+                    <inertial pos="-0.00446819 -0.000725304 -0.0207766" quat="0.994678 0.0423708 0.0938093 -0.00440228" mass="0.0835654" diaginertia="1.34411e-02 9.38816e-03 5.17541e-03" />
+                    <joint name="gripper_right_finger" pos="0 0 0" axis="1 0 0" type="slide" frictionloss="2" limited="true" range="-0.035 0" damping="7"/>
+                    <geom type="mesh"  condim="3" solimp="0.9 0.95 0.001" solref="0.02 1" friction="0.5 0.5 0.01" name="finger_right"  mesh="right_finger"  group="1"  />
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </body>
+</mujocoinclude>
