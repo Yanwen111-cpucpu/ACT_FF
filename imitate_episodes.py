@@ -329,6 +329,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 
                 root.attrs['sim'] = True
                 obs = root.create_group('observations')
+                image = obs.create_group('images')
+                for cam_name in camera_names:
+                    _ = image.create_dataset(cam_name, (max_timesteps, 480, 640, 3), dtype='uint8',
+                                            chunks=(1, 480, 640, 3), )
                 # compression='gzip',compression_opts=2,)
                 # compression=32001, compression_opts=(0, 0, 0, 0, 9, 1, 1), shuffle=False)
                 qpos = obs.create_dataset('qpos', (max_timesteps, 14))
