@@ -3,6 +3,8 @@ import numpy as np
 import os
 import pickle
 import argparse
+import time
+import h5py
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from tqdm import tqdm
@@ -116,6 +118,7 @@ def main(args):
     ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
+     
 
 
 def make_policy(policy_class, policy_config):
@@ -160,12 +163,12 @@ def eval_bc(config, ckpt_name, save_episode=True):
     max_timesteps = config['episode_len']
     task_name = config['task_name']
     temporal_agg = config['temporal_agg']
-    onscreen_cam = 'angle'
+    onscreen_cam = 'top'
 
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
-    loading_status = policy.load_state_dict(torch.load(ckpt_path))
+    loading_status = policy.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
     print(loading_status)
     policy.to('cpu')
     policy.eval()
@@ -176,6 +179,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     post_process = lambda a: a * stats['action_std'] + stats['action_mean']
+
+    pre_process_force = lambda s_force: (s_force - stats['force_mean']) / stats['force_std']
+
 
     # load environment
     if real_robot:
@@ -195,7 +201,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     max_timesteps = int(max_timesteps * 1) # may increase for real-world tasks
 
-    num_rollouts = 50
+    num_rollouts = 1 #TODO Changed
     episode_returns = []
     highest_rewards = []
     for rollout_id in range(num_rollouts):
@@ -208,6 +214,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
             BOX_POSE[0] = np.concatenate(sample_insertion_pose()) # used in sim reset
 
         ts = env.reset()
+        episode = [ts]
 
         ### onscreen render
         if onscreen_render:
@@ -219,7 +226,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
         if temporal_agg:
             all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).to('cpu')
 
-        qpos_history = torch.zeros((1, max_timesteps, state_dim)).to('cpu')
+        qpos_history = torch.zeros((1, max_timesteps, 14)).to('cpu') #hardcode
+        force_history = torch.zeros((1,max_timesteps, 1)).to('cpu')
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
@@ -243,11 +251,14 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 qpos = torch.from_numpy(qpos).float().to('cpu').unsqueeze(0)
                 qpos_history[:, t] = qpos
                 curr_image = get_image(ts, camera_names)
-
+                force_numpy = np.array(obs['c_force'])
+                force = pre_process_force(force_numpy)
+                force = torch.from_numpy(force).float().to('cpu').unsqueeze(0)
+                force_history[:, t] = force
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image)
+                        all_actions = policy(qpos, curr_image,force)
                     if temporal_agg:
                         all_time_actions[[t], t:t+num_queries] = all_actions
                         actions_for_curr_step = all_time_actions[:, t]
@@ -268,15 +279,73 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 ### post-process actions
                 raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)
+                
                 target_qpos = action
-
+                print(f'sent action:{target_qpos}')
                 ### step the environment
                 ts = env.step(target_qpos)
-
+                episode.append(ts)
                 ### for visualization
                 qpos_list.append(qpos_numpy)
                 target_qpos_list.append(target_qpos)
                 rewards.append(ts.reward)
+
+            # data recording to hdf5
+            data_dict = {
+            '/observations/qpos': [],
+            '/observations/qvel': [],
+            '/observations/force': [],
+            '/action': [],
+            }
+            for cam_name in camera_names:
+                data_dict[f'/observations/images/{cam_name}'] = []
+
+            # # because the replaying, there will be eps_len + 1 actions and eps_len + 2 timesteps
+            # # truncate here to be consistent
+            # joint_traj = joint_traj[:-1]
+            # episode_replay = episode_replay[:-1]
+
+            # len(joint_traj) i.e. actions: max_timesteps
+            # len(episode_replay) i.e. time steps: max_timesteps + 1
+
+            joint_traj = [ts.observation['arm_gripper_ctrl'][:7].copy() for ts in episode]
+            max_timesteps = len(joint_traj)
+            while joint_traj:
+                action = joint_traj.pop(0)
+                ts = episode.pop(0)
+                data_dict['/observations/qpos'].append(ts.observation['qpos'])
+                data_dict['/observations/qvel'].append(ts.observation['qvel'])
+                data_dict['/observations/force'].append(ts.observation['c_force'])
+                data_dict['/action'].append(action)
+
+                for cam_name in camera_names:
+                    data_dict[f'/observations/images/{cam_name}'].append(ts.observation['images'][cam_name])
+
+                    # HDF5
+            t0 = time.time()
+            dataset_dir='data/sim_telepolicy/'
+            dataset_path = os.path.join(dataset_dir, f'validation')
+            with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024 ** 2 * 2) as root:
+                
+                root.attrs['sim'] = True
+                obs = root.create_group('observations')
+                # compression='gzip',compression_opts=2,)
+                # compression=32001, compression_opts=(0, 0, 0, 0, 9, 1, 1), shuffle=False)
+                qpos = obs.create_dataset('qpos', (max_timesteps, 14))
+                qvel = obs.create_dataset('qvel', (max_timesteps, 14))
+                force = obs.create_dataset('force',(max_timesteps,1))
+                action = root.create_dataset('action', (max_timesteps,7))
+
+                for name, array in data_dict.items():
+                    if name not in root:
+                        root.create_dataset(name, data=array)
+                    else:
+                        root[name][...] = array
+
+            print(f'Saving: {time.time() - t0:.1f} secs\n')
+            time.sleep(1)
+
+            print(f'Saved to {dataset_dir}')
 
             plt.close()
         if real_robot:
@@ -311,13 +380,16 @@ def eval_bc(config, ckpt_name, save_episode=True):
         f.write('\n\n')
         f.write(repr(highest_rewards))
 
+
+
+
     return success_rate, avg_return
 
 
 def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = image_data.to('cpu'), qpos_data.to('cpu'), action_data.to('cpu'), is_pad.to('cpu')
-    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
+    image_data, qpos_data, action_data,force_data, is_pad = data
+    image_data, qpos_data, action_data,force_data, is_pad = image_data.to('cpu'), qpos_data.to('cpu'), action_data.to('cpu'),force_data.to('cpu'), is_pad.to('cpu')
+    return policy(qpos_data, image_data, force_data, action_data, is_pad) # TODO remove None
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -328,7 +400,6 @@ def train_bc(train_dataloader, val_dataloader, config):
     policy_config = config['policy_config']
 
     set_seed(seed)
-
     policy = make_policy(policy_class, policy_config)
     policy.to('cpu')
     optimizer = make_optimizer(policy_class, policy)

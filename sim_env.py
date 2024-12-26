@@ -1,3 +1,4 @@
+from turtle import right
 import numpy as np
 import os
 import collections
@@ -6,7 +7,8 @@ from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
 
-from constants import DT, XML_DIR
+from utils import sample_box_color, sample_poses, sample_box_size
+from constants import DT, PUPPET_GRIPPER_POSITION_OPEN, XML_DIR, START_ARM_POSE
 from constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
 from constants import MASTER_GRIPPER_POSITION_NORMALIZE_FN
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
@@ -47,6 +49,12 @@ def make_sim_env(task_name):
         task = InsertionTask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
                                   n_sub_steps=None, flat_observation=False)
+    elif 'sim_telepolicy' in task_name:
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_transfer_cube.xml')
+        physics = mujoco.Physics.from_xml_path(xml_path)
+        task = TeleTask(random=False)
+        env = control.Environment(physics, task, time_limit=120, control_timestep=DT,
+                                  n_sub_steps=None, flat_observation=False)
     else:
         raise NotImplementedError
     return env
@@ -56,18 +64,16 @@ class BimanualViperXTask(base.Task):
         super().__init__(random=random)
 
     def before_step(self, action, physics):
+        # action仅包含单臂6自由度和夹爪左右指的1个信号，共7个元素
         left_arm_action = action[:6]
-        right_arm_action = action[7:7+6]
-        normalized_left_gripper_action = action[6]
-        normalized_right_gripper_action = action[7+6]
 
-        left_gripper_action = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(normalized_left_gripper_action)
-        right_gripper_action = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(normalized_right_gripper_action)
+        left_gripper_action = action[6]
+        right_gripper_action = -action[6]
 
-        full_left_gripper_action = [left_gripper_action, -left_gripper_action]
-        full_right_gripper_action = [right_gripper_action, -right_gripper_action]
+        full_left_gripper_action = [left_gripper_action, right_gripper_action]
 
-        env_action = np.concatenate([left_arm_action, full_left_gripper_action, right_arm_action, full_right_gripper_action])
+
+        env_action = np.concatenate([left_arm_action, full_left_gripper_action,np.zeros(8)]) #padding for not used arm
         super().before_step(env_action, physics)
         return
 
@@ -82,8 +88,8 @@ class BimanualViperXTask(base.Task):
         right_qpos_raw = qpos_raw[8:16]
         left_arm_qpos = left_qpos_raw[:6]
         right_arm_qpos = right_qpos_raw[:6]
-        left_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(left_qpos_raw[6])]
-        right_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(right_qpos_raw[6])]
+        left_gripper_qpos = [left_qpos_raw[6]]
+        right_gripper_qpos = [right_qpos_raw[6]]
         return np.concatenate([left_arm_qpos, left_gripper_qpos, right_arm_qpos, right_gripper_qpos])
 
     @staticmethod
@@ -93,8 +99,8 @@ class BimanualViperXTask(base.Task):
         right_qvel_raw = qvel_raw[8:16]
         left_arm_qvel = left_qvel_raw[:6]
         right_arm_qvel = right_qvel_raw[:6]
-        left_gripper_qvel = [PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN(left_qvel_raw[6])]
-        right_gripper_qvel = [PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN(right_qvel_raw[6])]
+        left_gripper_qvel = [left_qvel_raw[6]]
+        right_gripper_qvel = [right_qvel_raw[6]]
         return np.concatenate([left_arm_qvel, left_gripper_qvel, right_arm_qvel, right_gripper_qvel])
 
     @staticmethod
@@ -109,13 +115,95 @@ class BimanualViperXTask(base.Task):
         obs['images'] = dict()
         obs['images']['top'] = physics.render(height=480, width=640, camera_id='top')
         obs['images']['angle'] = physics.render(height=480, width=640, camera_id='angle')
-        obs['images']['vis'] = physics.render(height=480, width=640, camera_id='front_close')
+        #obs['images']['vis'] = physics.render(height=480, width=640, camera_id='front_close')
+        obs['images']['gripper_top'] = physics.render(height=480, width=640, camera_id='gripper_top')
+        obs['images']['front_close'] = physics.render(height=480, width=640, camera_id='front_close')
+
+        obs['arm_gripper_ctrl'] = physics.data.ctrl.copy()
+        obs['c_force']=np.maximum(0,(obs['arm_gripper_ctrl'][6]-physics.named.data.qpos['gripper_left_finger'].copy())*100)
 
         return obs
 
     def get_reward(self, physics):
         # return whether left gripper is holding the box
         raise NotImplementedError
+
+class TeleTask(BimanualViperXTask):
+    def __init__(self, random=None):
+        super().__init__(random=random)
+        self.max_reward = 4
+
+    # def before_step(self, action,physics):
+    #     # action仅包含单臂6自由度和夹爪左右指的2个信号，共8个元素
+    #     left_arm_action = action[:6]
+
+    #     normalized_left_gripper_action = action[6]
+    #     normalized_right_gripper_action = action[7]
+
+    #     left_gripper_action = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(normalized_left_gripper_action)
+    #     right_gripper_action = -PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(normalized_right_gripper_action)
+
+    #     full_left_gripper_action = [left_gripper_action, right_gripper_action]
+
+
+    #     env_action = np.concatenate([left_arm_action, full_left_gripper_action])
+    #     super().before_step(env_action, physics)
+    #     return
+
+    def initialize_robots(self,physics):
+        # reset joint position
+        physics.named.data.qpos[:16] = START_ARM_POSE
+        np.copyto(physics.data.ctrl, START_ARM_POSE)
+
+    def initialize_episode(self, physics):
+        """Sets the state of the environment at the start of each episode."""
+        with physics.reset_context():
+            self.initialize_robots(physics)
+
+            # randomize box position, size and color
+            poses = sample_poses()
+            #cube_size = sample_box_size()
+            #cube_color = sample_box_color()
+            box_joint_start_idx = physics.model.name2id('red_box_joint', 'joint')
+            container_start_idx = physics.model.name2id('target_container','body')
+            #box_start_idx=physics.model.name2id('red_box','geom')
+            np.copyto(physics.data.qpos[box_joint_start_idx : box_joint_start_idx + 7], poses['box_pose'])
+            np.copyto(physics.model.body_pos[container_start_idx : container_start_idx + 3], poses['container_pose'][:3])
+            # np.copyto(physics.model.geom_size[box_start_idx], cube_size)
+            # np.copyto(physics.model.geom_rgba[box_start_idx], cube_color)
+
+        super().initialize_episode(physics)
+
+    @staticmethod
+    def get_env_state(physics):
+        env_state = physics.data.qpos.copy()[16:]
+        return env_state
+
+    def get_reward(self, physics):
+        # return whether left gripper is holding the box
+        all_contact_pairs = []
+        for i_contact in range(physics.data.ncon):
+            id_geom_1 = physics.data.contact[i_contact].geom1
+            id_geom_2 = physics.data.contact[i_contact].geom2
+            name_geom_1 = physics.model.id2name(id_geom_1, 'geom')
+            name_geom_2 = physics.model.id2name(id_geom_2, 'geom')
+            contact_pair = (name_geom_1, name_geom_2)
+            all_contact_pairs.append(contact_pair)
+            
+        touch_left_gripper = ("red_box", "vx300s_left/10_left_gripper_finger") in all_contact_pairs
+        touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
+        touch_table = ("red_box", "table") in all_contact_pairs
+
+        reward = 0
+        if touch_right_gripper:
+            reward = 1
+        if touch_right_gripper and not touch_table: # lifted
+            reward = 2
+        if touch_left_gripper: # attempted transfer
+            reward = 3
+        if touch_left_gripper and not touch_table: # successful transfer
+            reward = 4
+        return reward
 
 
 class TransferCubeTask(BimanualViperXTask):

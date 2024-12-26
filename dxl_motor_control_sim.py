@@ -2,7 +2,7 @@ from dynamixel_sdk import *  # Dynamixel SDK
 import time
 
 class DynamixelMotor:
-    def __init__(self, port, baudrate=57600, motor_id=1):
+    def __init__(self, port='COM10', baudrate=57600, motor_id=1):
         """
         初始化 Dynamixel 电机类
         """
@@ -19,6 +19,26 @@ class DynamixelMotor:
             print(f"Dynamixel Motor {self.motor_id} initialized on {self.port}.")
         else:
             raise Exception("Failed to connect to Dynamixel motor.")
+                
+        try:
+            self.ser = init_serial('COM9')
+            print("Motor Serial connection established.")
+            self.run()
+        except Exception as e:
+            self.ser = None
+            print("Warning: Motor Serial connection failed.")
+            
+        # 设置工作模式为 Current-Based Position Control
+        self.torque_disable()
+        self.set_mode(5)
+
+        # 设置最大电流为 50mA（可调整）
+        self.set_max_current(30)
+        self.enable_torque()
+        self.set_goal_position(360)
+        while (abs(self.get_pos()-360)>1):
+            time.sleep(0.2)
+        print("motor is set")
 
     def enable_torque(self):
         """
@@ -35,15 +55,9 @@ class DynamixelMotor:
             raise Exception(f"Error enabling torque: {self.packet_handler.getRxPacketError(error)}")
         print("Torque enabled.")
 
-    def set_mode(self, mode):
-        """
-        设置电机工作模式
-        :param mode: 模式值 (例如 5 为 Current-Based Position Control)
-        """
-        ADDR_OPERATING_MODE = 11
+    def torque_disable(self):
         ADDR_TORQUE_ENABLE = 64
         TORQUE_DISABLE = 0
-
         # 1. 禁用扭矩
         result, error = self.packet_handler.write1ByteTxRx(
             self.port_handler, self.motor_id, ADDR_TORQUE_ENABLE, TORQUE_DISABLE
@@ -52,7 +66,16 @@ class DynamixelMotor:
             raise Exception(f"Failed to disable torque: {self.packet_handler.getTxRxResult(result)}")
         if error != 0:
             raise Exception(f"Torque disable error: {self.packet_handler.getRxPacketError(error)}")
-        print("Torque disabled.")
+        #print("Torque disabled.")
+
+    def set_mode(self, mode):
+        """
+        设置电机工作模式
+        :param mode: 模式值 (例如 5 为 Current-Based Position Control)
+        """
+        ADDR_OPERATING_MODE = 11
+
+
 
         # 2. 设置工作模式
         result, error = self.packet_handler.write1ByteTxRx(
@@ -94,8 +117,9 @@ class DynamixelMotor:
         if error != 0:
             raise Exception(f"Error setting goal position: {self.packet_handler.getRxPacketError(error)}")
         print(f"Goal position set to {position_deg} degrees")
+        return goal_position
 
-    def get_position(self):
+    def get_pos(self):
         """
         获取当前电机位置
         """
@@ -107,9 +131,16 @@ class DynamixelMotor:
             raise Exception(f"Failed to get position: {self.packet_handler.getTxRxResult(result)}")
         if error != 0:
             raise Exception(f"Error getting position: {self.packet_handler.getRxPacketError(error)}")
-        return (position / 4095) * 360  # 转换为角度值
+        position= position/4095*360
 
-    def stop_motor(self):
+        
+        return position  
+
+    def send_force(self):
+        self.enable_torque()
+        self.set_goal_position(360)
+
+    def stop(self):
         """
         停止电机
         """
@@ -129,13 +160,14 @@ class DynamixelMotor:
 def main():
     motor = DynamixelMotor(port='COM10', motor_id=1)
 
-    position=motor.get_position()
+    position=motor.get_pos()
     goal_position=360
 
     # # 启用扭矩
     # motor.enable_torque()
 
     # 设置工作模式为 Current-Based Position Control
+    motor.torque_disable()
     motor.set_mode(5)
 
     # 设置最大电流为 50mA（可调整）
@@ -152,18 +184,19 @@ def main():
             # 设置目标位置为 360°
 
             # # 获取当前位置
-            position = motor.get_position()
+            position = motor.get_pos()
+            position_map=max(0,min((360-position)/15,4)/114.29) #映射到slave端，0-3.5cm工作范围 
             motor.enable_torque()
-            print(f"Current position: {position:.2f} degrees")
+            print(f"Current position: {position_map:.2f} cm")
             motor.set_goal_position(goal_position)
 
             time.sleep(5)
-            motor.set_mode(5)
+            motor.torque_disable()
             time.sleep(5)
         except KeyboardInterrupt:
             print("Ctrl+C detected. Stopping motor...")
-            motor.stop_motor()
-    motor.stop_motor()
+            motor.stop()
+    motor.stop()
 
 if __name__ == "__main__":
     main()

@@ -3,10 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pyquaternion import Quaternion
 
-from constants import SIM_TASK_CONFIGS
+from constants import SIM_TASK_CONFIGS, START_ARM_POSE
 from ee_sim_env import make_ee_sim_env
 import threading
-import motor_control_sim
+import dxl_motor_control_sim
 import arm_control_sim
 import signal
 import time
@@ -158,7 +158,7 @@ class InsertionPolicy(BasePolicy):
 
 class TelePolicy:
     def __init__(self,env,inject_noise=False):
-        self.motor= motor_control_sim.MotorControl() #末端夹爪控制
+        self.motor= dxl_motor_control_sim.DynamixelMotor() #末端夹爪控制
         self.arm=arm_control_sim.DXL_Arm()
         self.env=env
         # self.gripper_pos_queue = motor_control_sim.gripper_pos_queue
@@ -167,11 +167,12 @@ class TelePolicy:
         self.inject_noise = inject_noise
         self.running = True  # 添加一个运行标志
         self.time=time.time()
-        self.motor.send_force(0.1)  #初始化时先给一个力矩命令，后面等抓到物体了再更新，避免一直发送指令增大延迟（0.1s)
+        #self.motor.send_force(0.1)  #初始化时先给一个力矩命令，后面等抓到物体了再更新，避免一直发送指令增大延迟（0.1s)
         self.action=np.zeros(14)
         self.left_joint_angles=np.zeros(14)
         self.left_gripper=0
         self.force_feedback=0.1
+        self.force_feedback_bool=False
 
         self.loop=None
         self.thread = threading.Thread(target=self.run_event_loop, daemon=True)
@@ -226,7 +227,7 @@ class TelePolicy:
     async def update_joint_angles(self):
         while self.running:
             try:
-                self.left_joint_angles = self.arm.get_joint_angle()
+                self.left_joint_angles = self.arm.get_joint_angle()-self.arm.init_angle+ START_ARM_POSE[:6]#每次初始化时位于START_ARM_POSE
                 await asyncio.sleep(0.06)
             except asyncio.CancelledError:
                 break  # 任务被取消
@@ -237,9 +238,12 @@ class TelePolicy:
         """异步更新夹爪位置"""
         while self.running:
             try:
-                if self.motor.ser is not None:
-                    self.left_gripper = self.motor.get_pos()
+                if self.motor is not None:
+                    position=self.motor.get_pos()
+                    position_map=max(0,min((360-position)/15,4)/114.29) #映射到slave端，0-3.5cm工作范围 
+                    self.left_gripper = position_map
                     #print(f'left_finger_ctrl:{self.left_gripper}')
+                    #print(self.left_gripper)
                 else:
                     self.left_gripper +=0.005
                 #print(f"[GRIPPER_POS] {self.left_gripper}")
@@ -255,13 +259,16 @@ class TelePolicy:
             try:
                 #print('enter send force')
                 act_pos = self.env.physics.named.data.qpos['gripper_left_finger']
-                #print(f"act_pos:{act_pos}")
+
                 if self.contact(self.env.physics):
                     self.force_feedback = float(0.3 + (self.left_gripper - act_pos) * 20)
-                    
+                    self.force_feedback_bool=True
                 else:
                     self.force_feedback = 0.3  # 无接触，给一个复位力矩
-                self.motor.send_force(self.force_feedback)
+                    self.force_feedback_bool=False
+                    self.motor.torque_disable()
+                if self.force_feedback_bool:
+                    self.motor.send_force()
                 #print(f"[FORCE_FEEDBACK] {self.force_feedback}")
                 await asyncio.sleep(0.06)
             except asyncio.CancelledError:

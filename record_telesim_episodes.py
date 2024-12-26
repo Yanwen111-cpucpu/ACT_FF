@@ -115,17 +115,21 @@ def main(args):
                 plt_img1 = ts.observation['images'][render_cam_name]
                 plt_img2 = ts.observation['images']['front_close']   # 第二个摄像头
                 plt_img3 = ts.observation['images']['angle']
+                plt_img4 = ts.observation['images']['gripper_top']
 
                 img_surface1 = pygame.surfarray.make_surface(np.flipud(np.rot90(plt_img1)))
                 img_surface2 = pygame.surfarray.make_surface(np.flipud(np.rot90(plt_img2)))
                 img_surface2 = pygame.transform.scale(img_surface2, img_surface1.get_size())
                 img_surface3 = pygame.surfarray.make_surface(np.flipud(np.rot90(plt_img3)))
                 img_surface3 = pygame.transform.scale(img_surface3, img_surface1.get_size())
-
+                img_surface4 = pygame.surfarray.make_surface(np.flipud(np.rot90(plt_img4)))
+                img_surface4 = pygame.transform.scale(img_surface4, img_surface1.get_size())
+                #print(f"qpos:{ts.observation['qpos'][6]}")
                 # 显示图像
                 screen.blit(img_surface1, (0, 0))
                 screen.blit(img_surface2, (plt_img1.shape[1], 0))  # 右侧显示
-                screen.blit(img_surface3,(0,plt_img1.shape[0])) # 下方显示
+                screen.blit(img_surface3,(0,plt_img1.shape[0])) # 下左方显示
+                screen.blit(img_surface4,(plt_img3.shape[1],plt_img1.shape[0])) # 下右方显示
                 pygame.display.flip()
                 #print(f'ts_obs:{ts.observation["c_force"]}')
                 # 控制帧率
@@ -149,7 +153,7 @@ def main(args):
             success.append(0)
             continue #Not record when fail
 
-        joint_traj = [ts.observation['arm_gripper_ctrl'][:8].copy() for ts in episode]
+        joint_traj = [ts.observation['arm_gripper_ctrl'][:7].copy() for ts in episode]
 
         #print(joint_traj.pop(-1))
         subtask_info = episode[0].observation['env_state'].copy() # box pose at step 0
@@ -166,7 +170,7 @@ def main(args):
         - qpos                  (14,)         'float64'
         - qvel                  (14,)         'float64'
 
-        action                  (8,)         'float64'
+        action                  (7,)         'float64'
         force                   (1,)         'float64'
         """
 
@@ -186,9 +190,6 @@ def main(args):
 
         # len(joint_traj) i.e. actions: max_timesteps
         # len(episode_replay) i.e. time steps: max_timesteps + 1
-        for i in range(40):
-            joint_traj.pop(0)
-            episode.pop(0)
 
 
         max_timesteps = len(joint_traj)
@@ -218,7 +219,7 @@ def main(args):
             qpos = obs.create_dataset('qpos', (max_timesteps, 14))
             qvel = obs.create_dataset('qvel', (max_timesteps, 14))
             force = obs.create_dataset('force',(max_timesteps,1))
-            action = root.create_dataset('action', (max_timesteps, 8))
+            action = root.create_dataset('action', (max_timesteps,7))
 
             for name, array in data_dict.items():
                 root[name][...] = array

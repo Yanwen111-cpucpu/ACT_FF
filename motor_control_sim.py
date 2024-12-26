@@ -84,7 +84,7 @@ class MotorControl():
         #print(f'Response to speed control command:{response_loop}')
         code=int(response_loop[7:11],16)
         position=((code-0x8000)/0x8000)*360*self.Pmax  #假设操作范围为0-60°
-        position_map=max(0,min(position/15,4)/114.29) #映射到slave端，0-3.5cm工作范围 
+        position_map=max(0,min(position/15,4)/100) #映射到slave端，0-3.5cm工作范围 
         #print(f'Position:{response_loop}')
         # self.gripper_pos_queue.put(position_map)
         # print(f'position:{position}')

@@ -3,7 +3,7 @@ import numpy as np
 import collections
 import os
 
-from constants import DT, PUPPET_GRIPPER_POSITION_OPEN, XML_DIR
+from constants import DT, PUPPET_GRIPPER_POSITION_OPEN, START_ARM_POSE, XML_DIR
 from constants import PUPPET_GRIPPER_POSITION_CLOSE
 from constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
@@ -78,7 +78,7 @@ class BimanualViperXEETask(base.Task):
 
     def initialize_robots(self, physics):
         # reset joint position
-        physics.named.data.qpos[:16] = physics.data.ctrl[:16].copy()
+        physics.named.data.qpos[:16] = START_ARM_POSE
 
         # reset mocap to align with end effector
         # to obtain these numbers:
@@ -108,8 +108,8 @@ class BimanualViperXEETask(base.Task):
         right_qpos_raw = qpos_raw[8:16]
         left_arm_qpos = left_qpos_raw[:6]
         right_arm_qpos = right_qpos_raw[:6]
-        left_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(left_qpos_raw[6])]
-        right_gripper_qpos = [PUPPET_GRIPPER_POSITION_NORMALIZE_FN(right_qpos_raw[6])]
+        left_gripper_qpos = [left_qpos_raw[6]]
+        right_gripper_qpos = [right_qpos_raw[6]]
         return np.concatenate([left_arm_qpos, left_gripper_qpos, right_arm_qpos, right_gripper_qpos])
 
     @staticmethod
@@ -164,7 +164,7 @@ class TeleTask(BimanualViperXEETask):
         action_right = action[a_len:]
 
         # np.copyto(physics.data.qpos[:6], action_left[:6])
-        np.copyto(physics.data.ctrl[:6], action_left[:6])
+        np.copyto(physics.data.ctrl[:6], action_left[:6]) #重要，直接改变qpos会影响动力学计算
         physics.data.ctrl[1]=action_left[1] #必须有这行，否则joint2的运动就很奇怪，我也不知道为什么
         #physics.data.qpos[1]=action_left[0]
         # 设置夹爪开合度
@@ -180,17 +180,17 @@ class TeleTask(BimanualViperXEETask):
         """Sets the state of the environment at the start of each episode."""
         self.initialize_robots(physics)
         # randomize box position
-        poses = sample_poses()
+        #poses = sample_poses()
         cube_size = sample_box_size()
-        cube_color = sample_box_color()
+        #cube_color = sample_box_color()
         box_joint_start_idx = physics.model.name2id('red_box_joint', 'joint')
         container_start_idx = physics.model.name2id('target_container','body')
         box_start_idx=physics.model.name2id('red_box','geom')
-        np.copyto(physics.data.qpos[box_joint_start_idx : box_joint_start_idx + 7], poses['box_pose'])
-        np.copyto(physics.model.body_pos[container_start_idx : container_start_idx + 3], poses['container_pose'][:3])
-        np.copyto(physics.model.geom_size[box_start_idx], cube_size)
-        np.copyto(physics.model.geom_rgba[box_start_idx], cube_color)
-        # np.copyto(physics.model.geom_rgba[box_start_idx : box_start_idx + 4], cube_color)
+        # np.copyto(physics.data.qpos[box_joint_start_idx : box_joint_start_idx + 7], poses['box_pose'])
+        # np.copyto(physics.model.body_pos[container_start_idx : container_start_idx + 3], poses['container_pose'][:3])
+        #np.copyto(physics.model.geom_size[box_start_idx], cube_size)
+        #np.copyto(physics.model.geom_rgba[box_start_idx], cube_color)
+        #np.copyto(physics.model.geom_rgba[box_start_idx : box_start_idx + 4], cube_color)
         # print(f"randomized cube position to {cube_position}")
         # link_6_start_idx=physics.model.name2id('joint_6','joint')
         # gripper_start_idx=physics.model.name2id('gripper_root','joint')

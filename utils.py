@@ -1,3 +1,4 @@
+from tracemalloc import start
 import numpy as np
 import torch
 import os
@@ -25,33 +26,39 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
-        with h5py.File(dataset_path, 'r') as root:
-            is_sim = root.attrs['sim']
-            original_action_shape = root['/action'].shape
-            episode_len = original_action_shape[0]
-            if sample_full_episode:
-                start_ts = 0
-            else:
-                start_ts = np.random.choice(episode_len)
-            # get observation at start_ts only
-            qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
-            image_dict = dict()
-            for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
-            # get all actions after and including start_ts
-            if is_sim:
-                action = root['/action'][start_ts:]
-                action_len = episode_len - start_ts
-            else:
-                action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
-                action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+        try:
+            with h5py.File(dataset_path, 'r') as root:
+                is_sim = root.attrs['sim']
+                original_action_shape = root['/action'].shape
+                episode_len = 420 #hardcode
+                #print(f"episode_len of {episode_id}:{episode_len}")
+                if sample_full_episode:
+                    start_ts = 0
+                else:
+                    start_ts = np.random.choice(original_action_shape[0])
+                # get observation at start_ts only
+                qpos = root['/observations/qpos'][start_ts]
+                qvel = root['/observations/qvel'][start_ts]
+                force = root['/observations/force'][start_ts]
+                image_dict = dict()
+                for cam_name in self.camera_names:
+                    image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                # get all actions after and including start_ts
+                if is_sim:
+                    action = root['/action'][start_ts:]
+                    action_len = episode_len - start_ts
+                else:
+                    action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
+                    action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+        except (OSError, KeyError) as e:
+            # 捕获文件名不匹配或数据键缺失的错误
+            print(f"Warning: Skipping episode {episode_id} due to error: {e}")
 
         self.is_sim = is_sim
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)
-        padded_action[:action_len] = action
+        padded_action = np.zeros((episode_len,original_action_shape[1]), dtype=np.float32)
+        padded_action[:len(action)] = action
         is_pad = np.zeros(episode_len)
-        is_pad[action_len:] = 1
+        is_pad[len(action):] = 1
 
         # new axis for different cameras
         all_cam_images = []
@@ -63,6 +70,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
         action_data = torch.from_numpy(padded_action).float()
+        force_data = torch.from_numpy(force)
         is_pad = torch.from_numpy(is_pad).bool()
 
         # channel last
@@ -72,38 +80,93 @@ class EpisodicDataset(torch.utils.data.Dataset):
         image_data = image_data / 255.0
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+        force_data = (force_data - self.norm_stats["force_mean"])/self.norm_stats["force_std"]
+        # print(f"Sample {index}:")
+        # print(f"  qpos shape: {qpos_data.shape}, type: {type(qpos_data)}")
+        # print(f"  image shape: {image_data.shape}, type: {type(image_data)}")
+        # print(f"  force shape: {force_data.shape}, type: {type(force_data)}")
+        # print(f"  action shape: {action_data.shape}, type: {type(action_data)}")
+        # print(f"  is_pad shape: {is_pad.shape}, type: {type(is_pad)}")
+        return image_data, qpos_data, action_data,force_data,is_pad
 
-        return image_data, qpos_data, action_data, is_pad
+def padding(tensor, target_length):
+    """
+    裁剪序列到固定长度 target_length
+    """
+    current_length = tensor.shape[0]
+    padding = torch.zeros(target_length - current_length, tensor.shape[1])
+    return torch.cat((tensor, padding), dim=0)
+
 
 
 def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
     all_action_data = []
+    all_force_data = []
     for episode_idx in range(num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
-        with h5py.File(dataset_path, 'r') as root:
-            qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]
-            action = root['/action'][()]
+        try:
+            # 尝试打开文件
+            with h5py.File(dataset_path, 'r') as root:
+                qpos = root['/observations/qpos'][()]
+                qvel = root['/observations/qvel'][()]
+                force = root['/observations/force'][()]
+                action = root['/action'][()]
+        except (OSError, KeyError) as e:
+            # 捕获文件名不匹配或数据键缺失的错误，跳过当前循环
+            print(f"Warning: Skipping episode {episode_idx} due to error: {e}")
+            continue
+
+
+
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
+        all_force_data.append(torch.from_numpy(force))
+
+    if not all_qpos_data or not all_action_data or not all_force_data:
+        raise ValueError("No valid data found. Please check the dataset directory or file names.")
+
+    target_length = 1000  # 假设episode_len=1000
+    all_qpos_data = [padding(tensor, target_length) for tensor in all_qpos_data]
+    all_action_data = [padding(tensor, target_length) for tensor in all_action_data]
+    all_force_data = [padding(tensor, target_length) for tensor in all_force_data]
+
+
     all_qpos_data = torch.stack(all_qpos_data)
     all_action_data = torch.stack(all_action_data)
-    all_action_data = all_action_data
+    all_force_data = torch.stack(all_force_data)
 
-    # normalize action data
-    action_mean = all_action_data.mean(dim=[0, 1], keepdim=True)
-    action_std = all_action_data.std(dim=[0, 1], keepdim=True)
-    action_std = torch.clip(action_std, 1e-2, np.inf) # clipping
+    # 创建掩码
+    qpos_mask = (all_qpos_data != 0).float()
+    action_mask = (all_action_data != 0).float()
 
-    # normalize qpos data
-    qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
-    qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
-    qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
+    # 计算均值
+    qpos_mean = (all_qpos_data * qpos_mask).sum(dim=[0, 1], keepdim=True) / qpos_mask.sum(dim=[0, 1], keepdim=True)
+    action_mean = (all_action_data * action_mask).sum(dim=[0, 1], keepdim=True) / action_mask.sum(dim=[0, 1], keepdim=True)
 
-    stats = {"action_mean": action_mean.numpy().squeeze(), "action_std": action_std.numpy().squeeze(),
-             "qpos_mean": qpos_mean.numpy().squeeze(), "qpos_std": qpos_std.numpy().squeeze(),
-             "example_qpos": qpos}
+    # 计算标准差
+    qpos_var = ((all_qpos_data - qpos_mean) ** 2 * qpos_mask).sum(dim=[0, 1], keepdim=True) / qpos_mask.sum(dim=[0, 1], keepdim=True)
+    qpos_std = torch.sqrt(qpos_var)
+    qpos_std = torch.clip(qpos_std, 1e-2, np.inf)
+
+    action_var = ((all_action_data - action_mean) ** 2 * action_mask).sum(dim=[0, 1], keepdim=True) / action_mask.sum(dim=[0, 1], keepdim=True)
+    action_std = torch.sqrt(action_var)
+    action_std = torch.clip(action_std, 1e-2, np.inf)
+
+    # normalize force data
+    force_mean = all_force_data.mean(dim=[0, 1], keepdim=True)
+    force_std = all_force_data.std(dim=[0, 1], keepdim=True)
+    force_std = torch.clip(force_std, 1e-2, np.inf)  # clipping
+
+    stats = {
+        "action_mean": action_mean.numpy().squeeze(),
+        "action_std": action_std.numpy().squeeze(),
+        "qpos_mean": qpos_mean.numpy().squeeze(),
+        "qpos_std": qpos_std.numpy().squeeze(),
+        "example_qpos": qpos,
+        "force_mean": force_mean.numpy().squeeze(),
+        "force_std": force_std.numpy().squeeze(),
+    }
 
     return stats
 
@@ -116,7 +179,7 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     train_indices = shuffled_indices[:int(train_ratio * num_episodes)]
     val_indices = shuffled_indices[int(train_ratio * num_episodes):]
 
-    # obtain normalization stats for qpos and action
+    # obtain normalization stats for qpos, action and force
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
@@ -155,13 +218,13 @@ def sample_box_color():
 
 def sample_poses():
     # Container pose range
-    container_x_range = [-0.6, 0.6]
-    container_y_range = [0.5, 0.9]
+    container_x_range = [0.6, 0.72]
+    container_y_range = [0.45, 0.55]
     container_z_range = [0, 0]  # Container is on the ground
 
     # Box pose range
-    box_x_range = [-0.6, 0.6]
-    box_y_range = [0.5, 0.8]
+    box_x_range = [0.2, 0.3]
+    box_y_range = [0.8, 0.92]
     box_z_range = [0.3, 0.3]  # Box starts above the ground
 
     # Generate container position

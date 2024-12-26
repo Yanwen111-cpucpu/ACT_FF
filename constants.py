@@ -32,9 +32,9 @@ SIM_TASK_CONFIGS = {
     },
     'sim_telepolicy' :{
         'dataset_dir': DATA_DIR + '/sim_telepolicy',
-        'num_episodes': 50,
+        'num_episodes': 106,
         'episode_len': 1000,
-        'camera_names': ['top','gripper_top']
+        'camera_names': ['top','gripper_top','front_close']
     }
 }
 
@@ -42,15 +42,15 @@ SIM_TASK_CONFIGS = {
 DT = 0.02
 JOINT_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 #START_ARM_POSE = [0, -0.96, 1.16, 0, -0.3, 0, 0.02239, -0.02239,  0, 0, 0, 0, 0, 0, 0, 0]
-#START_ARM_POSE = [0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0]
+START_ARM_POSE = [0, 0, 0, 0, 0, -1.57, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0]
 
 XML_DIR = str(pathlib.Path(__file__).parent.resolve()) + '/assets/' # note: absolute path
 
 # Left finger position limits (qpos[7]), right_finger = -1 * left_finger
 MASTER_GRIPPER_POSITION_OPEN = 0.02417
 MASTER_GRIPPER_POSITION_CLOSE = 0.01244
-PUPPET_GRIPPER_POSITION_OPEN = 0.05800
-PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
+PUPPET_GRIPPER_POSITION_OPEN = 0.035
+PUPPET_GRIPPER_POSITION_CLOSE = 0
 
 # Gripper joint limits (qpos[6])
 MASTER_GRIPPER_JOINT_OPEN = 0.3083

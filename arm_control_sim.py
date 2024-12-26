@@ -111,6 +111,8 @@ class DXL_Arm():
             print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
         elif dxl_error != 0:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        self.init_angle=self.get_joint_angle()
+
     def get_joint_angle(self):
             # Read present position
         motor_angles=np.zeros(6)
@@ -134,7 +136,7 @@ class DXL_Arm():
                 elif motor_id == 5:
                     motor_angle = -(motor_angle - 180)
                 elif motor_id == 6:
-                    motor_angle = -(motor_angle-90)
+                    motor_angle = -(motor_angle-270)
                 motor_angles[motor_id-1]=motor_angle/180*3.14
 
             return motor_angles
