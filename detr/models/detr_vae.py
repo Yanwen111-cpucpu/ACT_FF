@@ -68,7 +68,7 @@ class DETRVAE(nn.Module):
         self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
         self.encoder_action_proj = nn.Linear(7, hidden_dim) # project action to embedding
         self.encoder_joint_proj = nn.Linear(14, hidden_dim)  # project qpos to embedding
-        self.encoder_force_proj = nn.Linear(1,hidden_dim)
+        #self.encoder_force_proj = nn.Linear(1,hidden_dim)
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
         self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
 
@@ -93,23 +93,23 @@ class DETRVAE(nn.Module):
             action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim)
             qpos_embed = self.encoder_joint_proj(qpos)  # (bs, hidden_dim)
             qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim)
-            force_embed = self.encoder_force_proj(force) # (bs, hidden_dim)
-            force_embed = torch.unsqueeze(force_embed,axis=1) # (bs, 1 ,hidden_dim)
+            #force_embed = self.encoder_force_proj(force) # (bs, hidden_dim)
+            #force_embed = torch.unsqueeze(force_embed,axis=1) # (bs, 1 ,hidden_dim)
             cls_embed = self.cls_embed.weight # (1, hidden_dim)
             cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
-            encoder_input = torch.cat([cls_embed, qpos_embed,force_embed, action_embed], axis=1) # (bs, seq+2, hidden_dim)
+            encoder_input = torch.cat([cls_embed, qpos_embed, action_embed], axis=1) # (bs, seq+2, hidden_dim)
             encoder_input = encoder_input.permute(1, 0, 2) # (seq+2, bs, hidden_dim)
 
             # do not mask cls token
-            cls_joint_is_pad = torch.full((bs, 3), False).to(qpos.device) # False: not a padding
+            cls_joint_is_pad = torch.full((bs, 2), False).to(qpos.device) # False: not a padding
             is_pad = torch.cat([cls_joint_is_pad, is_pad], axis=1)  # (bs, seq+1)
 
             # Adjust position embedding
             pos_embed = self.pos_table.clone().detach() 
             pos_embed = pos_embed.permute(1, 0, 2)  # (seq+1, 1, hidden_dim)
-            force_embed = torch.zeros((1, 1, pos_embed.shape[2]), device=pos_embed.device)  # (1, 1, hidden_dim)
-            force_embed = force_embed.permute(1,0,2)
-            pos_embed = torch.cat([pos_embed, force_embed], dim=0)  #(seq+2, 1, hidden_dim)
+            #force_embed = torch.zeros((1, 1, pos_embed.shape[2]), device=pos_embed.device)  # (1, 1, hidden_dim)
+            #force_embed = force_embed.permute(1,0,2)
+           # pos_embed = torch.cat([pos_embed, force_embed], dim=0)  #(seq+2, 1, hidden_dim)
             
 
             # query model

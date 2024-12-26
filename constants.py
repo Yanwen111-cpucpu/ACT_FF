@@ -32,7 +32,7 @@ SIM_TASK_CONFIGS = {
     },
     'sim_telepolicy' :{
         'dataset_dir': DATA_DIR + '/sim_telepolicy',
-        'num_episodes': 106,
+        'num_episodes': 2,
         'episode_len': 1000,
         'camera_names': ['top','gripper_top','front_close']
     }

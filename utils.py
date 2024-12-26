@@ -126,7 +126,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     if not all_qpos_data or not all_action_data or not all_force_data:
         raise ValueError("No valid data found. Please check the dataset directory or file names.")
 
-    target_length = 1000  # 假设episode_len=1000
+    target_length = 500  # 假设episode_len=1000
     all_qpos_data = [padding(tensor, target_length) for tensor in all_qpos_data]
     all_action_data = [padding(tensor, target_length) for tensor in all_action_data]
     all_force_data = [padding(tensor, target_length) for tensor in all_force_data]
