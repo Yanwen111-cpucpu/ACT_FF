@@ -63,7 +63,7 @@ class DXL_Arm():
 
         # Use the actual port assigned to the U2D2.
         # ex) Windows: "COM*", Linux: "/dev/ttyUSB*", Mac: "/dev/tty.usbserial-*"
-        DEVICENAME                  = 'COM13'
+        DEVICENAME                  = 'COM10'
 
         TORQUE_ENABLE               = 1     # Value for enabling the torque
         TORQUE_DISABLE              = 0     # Value for disabling the torque
@@ -112,6 +112,20 @@ class DXL_Arm():
         elif dxl_error != 0:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         self.init_angle=self.get_joint_angle()
+        
+        # For EE
+        self.ee_id = 7
+        # 设置工作模式为 Current-Based Position Control
+        self.torque_ee_disable()
+        self.set_ee_mode(5)
+
+        # 设置最大电流为 50mA（可调整）
+        self.set_ee_max_current(30)
+        self.enable_ee_torque()
+        self.set_ee_goal_position(360)
+        while (abs(self.get_ee_pos()-360)>1):
+            time.sleep(0.2)
+        print("EE motor is set")
 
     def get_joint_angle(self):
             # Read present position
@@ -126,13 +140,13 @@ class DXL_Arm():
 
                 motor_angle=dxl_present_position/4096*360 #编码器值转化角度值
                 if motor_id == 1:
-                    motor_angle -= 270
+                    motor_angle = -(motor_angle-270)
                 elif motor_id == 2:
-                    motor_angle = -(motor_angle-180)
+                    motor_angle = (motor_angle-180)
                 elif motor_id == 3:
-                    motor_angle = -(motor_angle-180)
+                    motor_angle = (motor_angle-180)
                 elif motor_id == 4:
-                    motor_angle = -(motor_angle-180)
+                    motor_angle = (motor_angle-180)
                 elif motor_id == 5:
                     motor_angle = -(motor_angle - 180)
                 elif motor_id == 6:
@@ -142,6 +156,108 @@ class DXL_Arm():
             return motor_angles
         else:
             return motor_angles #np.zeros(6)
+
+    def enable_ee_torque(self):
+        """
+        启用电机扭矩
+        """
+        ADDR_TORQUE_ENABLE = 64
+        TORQUE_ENABLE = 1
+        result, error = self.packetHandler.write1ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_TORQUE_ENABLE, TORQUE_ENABLE
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to enable torque: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Error enabling torque: {self.packetHandler.getRxPacketError(error)}")
+        print("EE Torque enabled.")
+
+    def torque_ee_disable(self):
+        ADDR_TORQUE_ENABLE = 64
+        TORQUE_DISABLE = 0
+        # 1. 禁用扭矩
+        result, error = self.packetHandler.write1ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_TORQUE_ENABLE, TORQUE_DISABLE
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to disable torque: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Torque disable error: {self.packetHandler.getRxPacketError(error)}")
+        #print("Torque disabled.")
+
+    def set_ee_mode(self, mode):
+        """
+        设置电机工作模式
+        :param mode: 模式值 (例如 5 为 Current-Based Position Control)
+        """
+        ADDR_OPERATING_MODE = 11
+
+
+
+        # 2. 设置工作模式
+        result, error = self.packetHandler.write1ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_OPERATING_MODE, mode
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to set mode: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Error setting mode: {self.packetHandler.getRxPacketError(error)}")
+        print(f"Operating mode set to {mode}.")
+
+
+    def set_ee_max_current(self, current_ma):
+        """
+        设置电机的最大电流
+        """
+        ADDR_CURRENT_LIMIT = 38
+        current_limit = int(current_ma / 2.69)  # 单位转换：1 = 2.69mA
+        result, error = self.packetHandler.write2ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_CURRENT_LIMIT, current_limit
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to set max current: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Error setting max current: {self.packetHandler.getRxPacketError(error)}")
+        print(f"Max current set to {current_ma} mA.")
+
+    def set_ee_goal_position(self, position_deg):
+        """
+        设置电机目标位置
+        """
+        ADDR_GOAL_POSITION = 116
+        goal_position = int((position_deg / 360) * 4095)  # 将角度转换为位置值
+        result, error = self.packetHandler.write4ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_GOAL_POSITION, goal_position
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to set goal position: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Error setting goal position: {self.packetHandler.getRxPacketError(error)}")
+        print(f"Goal position set to {position_deg} degrees")
+        return goal_position
+
+    def get_ee_pos(self):
+        """
+        获取当前电机位置
+        """
+        ADDR_PRESENT_POSITION = 132
+        position, result, error = self.packetHandler.read4ByteTxRx(
+            self.portHandler, self.ee_id, ADDR_PRESENT_POSITION
+        )
+        if result != COMM_SUCCESS:
+            raise Exception(f"Failed to get position: {self.packetHandler.getTxRxResult(result)}")
+        if error != 0:
+            raise Exception(f"Error getting position: {self.packetHandler.getRxPacketError(error)}")
+        position= position/4095*360
+
+        
+        return position  
+
+    def send_ee_force(self):
+        self.enable_ee_torque()
+        self.set_ee_goal_position(360)
+
+
     def stop(self):
         # Close port 
         self.portHandler.closePort()

@@ -147,12 +147,12 @@ def get_image(ts, camera_names):
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
-    curr_image = torch.from_numpy(curr_image / 255.0).float().to('cpu').unsqueeze(0)
+    curr_image = torch.from_numpy(curr_image / 255.0).float().to('cuda').unsqueeze(0)
     return curr_image
 
 
 def eval_bc(config, ckpt_name, save_episode=True):
-    set_seed(1000)
+    set_seed(config['seed'])
     ckpt_dir = config['ckpt_dir']
     state_dim = config['state_dim']
     real_robot = config['real_robot']
@@ -168,9 +168,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
-    loading_status = policy.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
+    loading_status = policy.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cuda')))
     print(loading_status)
-    policy.to('cpu')
+    policy.to('cuda')
     policy.eval()
     print(f'Loaded: {ckpt_path}')
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
@@ -201,7 +201,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     max_timesteps = int(max_timesteps * 1) # may increase for real-world tasks
 
-    num_rollouts = 1 #TODO Changed
+    num_rollouts = 2 #TODO Changed
     episode_returns = []
     highest_rewards = []
     for rollout_id in range(num_rollouts):
@@ -224,10 +224,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
         ### evaluation loop
         if temporal_agg:
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).to('cpu')
+            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).to('cuda')
 
-        qpos_history = torch.zeros((1, max_timesteps, 14)).to('cpu') #hardcode
-        force_history = torch.zeros((1,max_timesteps, 1)).to('cpu')
+        qpos_history = torch.zeros((1, max_timesteps, 14)).to('cuda') #hardcode
+        force_history = torch.zeros((1,max_timesteps, 1)).to('cuda')
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
@@ -248,12 +248,12 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     image_list.append({'main': obs['image']})
                 qpos_numpy = np.array(obs['qpos'])
                 qpos = pre_process(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().to('cpu').unsqueeze(0)
+                qpos = torch.from_numpy(qpos).float().to('cuda').unsqueeze(0)
                 qpos_history[:, t] = qpos
                 curr_image = get_image(ts, camera_names)
                 force_numpy = np.array(obs['c_force'])
                 force = pre_process_force(force_numpy)
-                force = torch.from_numpy(force).float().to('cpu').unsqueeze(0)
+                force = torch.from_numpy(force).float().to('cuda').unsqueeze(0)
                 force_history[:, t] = force
                 ### query policy
                 if config['policy_class'] == "ACT":
@@ -267,7 +267,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                         k = 0.01
                         exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
                         exp_weights = exp_weights / exp_weights.sum()
-                        exp_weights = torch.from_numpy(exp_weights).to('cpu').unsqueeze(dim=1)
+                        exp_weights = torch.from_numpy(exp_weights).to('cuda').unsqueeze(dim=1)
                         raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
                     else:
                         raw_action = all_actions[:, t % query_frequency]
@@ -277,7 +277,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     raise NotImplementedError
 
                 ### post-process actions
-                raw_action = raw_action.squeeze(0).cpu().numpy()
+                raw_action = raw_action.squeeze(0).cuda().numpy()
                 action = post_process(raw_action)
                 
                 target_qpos = action
@@ -392,7 +392,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data,force_data, is_pad = data
-    image_data, qpos_data, action_data,force_data, is_pad = image_data.to('cpu'), qpos_data.to('cpu'), action_data.to('cpu'),force_data.to('cpu'), is_pad.to('cpu')
+    image_data, qpos_data, action_data,force_data, is_pad = image_data.to('cuda'), qpos_data.to('cuda'), action_data.to('cuda'),force_data.to('cuda'), is_pad.to('cuda')
     return policy(qpos_data, image_data, force_data, action_data, is_pad) # TODO remove None
 
 
@@ -405,7 +405,7 @@ def train_bc(train_dataloader, val_dataloader, config):
 
     set_seed(seed)
     policy = make_policy(policy_class, policy_config)
-    policy.to('cpu')
+    policy.to('cuda')
     optimizer = make_optimizer(policy_class, policy)
 
     train_history = []

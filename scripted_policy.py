@@ -158,8 +158,8 @@ class InsertionPolicy(BasePolicy):
 
 class TelePolicy:
     def __init__(self,env,inject_noise=False):
-        self.motor= dxl_motor_control_sim.DynamixelMotor() #末端夹爪控制
-        self.arm=arm_control_sim.DXL_Arm()
+        #self.motor= dxl_motor_control_sim.DynamixelMotor() #末端夹爪控制
+        self.arm=arm_control_sim.DXL_Arm() #EE is included
         self.env=env
         # self.gripper_pos_queue = motor_control_sim.gripper_pos_queue
         # self.feedback_queue = motor_control_sim.feedback_queue
@@ -167,7 +167,7 @@ class TelePolicy:
         self.inject_noise = inject_noise
         self.running = True  # 添加一个运行标志
         self.time=time.time()
-        #self.motor.send_force(0.1)  #初始化时先给一个力矩命令，后面等抓到物体了再更新，避免一直发送指令增大延迟（0.1s)
+
         self.action=np.zeros(14)
         self.left_joint_angles=np.zeros(14)
         self.left_gripper=0
@@ -194,7 +194,7 @@ class TelePolicy:
             self.thread.join()  # 等待线程结束
             self.loop.close()
         self.running = False
-        self.motor.stop()
+        #self.motor.stop()
         self.arm.stop()
     def __call__(self, ts):
         time_start=self.time
@@ -238,8 +238,8 @@ class TelePolicy:
         """异步更新夹爪位置"""
         while self.running:
             try:
-                if self.motor is not None:
-                    position=self.motor.get_pos()
+                if self.arm is not None:
+                    position=self.arm.get_ee_pos()
                     position_map=max(0,min((360-position)/15,4)/114.29) #映射到slave端，0-3.5cm工作范围 
                     self.left_gripper = position_map
                     #print(f'left_finger_ctrl:{self.left_gripper}')
@@ -266,9 +266,9 @@ class TelePolicy:
                 else:
                     self.force_feedback = 0.3  # 无接触，给一个复位力矩
                     self.force_feedback_bool=False
-                    self.motor.torque_disable()
+                    self.arm.torque_ee_disable()
                 if self.force_feedback_bool:
-                    self.motor.send_force()
+                    self.arm.send_ee_force()
                 #print(f"[FORCE_FEEDBACK] {self.force_feedback}")
                 await asyncio.sleep(0.06)
             except asyncio.CancelledError:
