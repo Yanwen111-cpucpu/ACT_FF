@@ -228,6 +228,7 @@ class TelePolicy:
         while self.running:
             try:
                 self.left_joint_angles = self.arm.get_joint_angle()-self.arm.init_angle+ START_ARM_POSE[:6]#每次初始化时位于START_ARM_POSE
+                print(self.left_joint_angles)
                 await asyncio.sleep(0.06)
             except asyncio.CancelledError:
                 break  # 任务被取消

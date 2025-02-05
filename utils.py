@@ -1,4 +1,5 @@
 from tracemalloc import start
+from turtle import st
 import numpy as np
 import torch
 import os
@@ -9,7 +10,7 @@ import IPython
 e = IPython.embed
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, delta_timestamps=None):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
@@ -26,6 +27,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
+
         try:
             with h5py.File(dataset_path, 'r') as root:
                 is_sim = root.attrs['sim']
@@ -43,6 +45,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 image_dict = dict()
                 for cam_name in self.camera_names:
                     image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                    #print(root[f'/observations/images/{cam_name}'][start_ts])
                 # get all actions after and including start_ts
                 if is_sim:
                     action = root['/action'][start_ts:]
@@ -87,6 +90,123 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # print(f"  force shape: {force_data.shape}, type: {type(force_data)}")
         # print(f"  action shape: {action_data.shape}, type: {type(action_data)}")
         # print(f"  is_pad shape: {is_pad.shape}, type: {type(is_pad)}")
+        
+        return image_data, qpos_data, action_data,force_data,is_pad
+
+class DiffusionDataset(torch.utils.data.Dataset):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats,delta_timestamps=None):
+        super(EpisodicDataset).__init__()
+        self.episode_ids = episode_ids
+        self.dataset_dir = dataset_dir
+        self.camera_names = camera_names
+        self.norm_stats = norm_stats
+        self.is_sim = None
+        self.delta_timestamps = delta_timestamps
+        
+        self.__getitem__(0) # initialize self.is_sim
+
+    def __len__(self):
+        return len(self.episode_ids)
+
+    def __getitem__(self, index):
+        sample_full_episode = False # hardcode
+
+        episode_id = self.episode_ids[index]
+        dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
+
+        try:
+            with h5py.File(dataset_path, 'r') as root:
+                is_sim = root.attrs['sim']
+                original_action_len = root['/action'].shape[0]
+                episode_len = 420 #hardcode
+                #print(f"episode_len of {episode_id}:{episode_len}")
+                if sample_full_episode:
+                    start_ts = 0
+
+                else:
+                    start_ts = np.random.choice(original_action_len)
+
+                action_length = 16  # action_length in delta_timestamps
+
+                if start_ts == 0:
+                    # 提取第 0 时刻的数据
+                    qpos_base = root['/observations/qpos'][0:1]  # 第 0 时刻的数据，形状为 (1, features)
+                    qpos = np.repeat(qpos_base, 2, axis=0)       # 重复 2 次，形状为 (2, features)
+
+                    qvel_base = root['/observations/qvel'][0:1]
+                    qvel = np.repeat(qvel_base, 2, axis=0)
+
+                    force_base = root['/observations/force'][0:1]
+                    force = np.repeat(force_base, 2, axis=0)
+
+                    original_action_base = root['/action'][0:15]
+                    original_action = np.vstack([root['/action'][0:1], original_action_base])
+
+                    image_base_dict = dict()
+                    image_dict = dict()
+                    for cam_name in self.camera_names:
+                        image_base_dict[cam_name] = root[f'/observations/images/{cam_name}'][0:1]
+                        image_dict[cam_name] = np.repeat(image_base_dict[cam_name],2,axis=0)
+
+                    is_pad = np.zeros(action_length, dtype=np.int32)
+                    is_pad[0] = 1
+
+                else:
+                    qpos = root['/observations/qpos'][start_ts-1:start_ts+1] #hardcode
+                    qvel = root['/observations/qvel'][start_ts-1:start_ts+1]
+                    force = root['/observations/force'][start_ts-1:start_ts+1]
+                
+                    original_action_end = min(start_ts + 15, root['/action'].shape[0])  # 防止越界
+                    # 提取合法范围的数据
+                    original_action = root['/action'][max(0, start_ts - 1):original_action_end]
+
+                    # 初始化 is_pad 数组，默认所有值为 0
+                    
+                    is_pad = np.zeros(action_length, dtype=np.int32)
+
+                    # 计算越界部分的长度
+                    valid_length = original_action.shape[0]
+                    pad_length = action_length - valid_length  # 需要填充的数量
+
+                    if pad_length > 0:
+                        # 如果存在越界部分，填充最后一个合法数据
+                        padding_data = np.repeat(original_action[-1:], pad_length, axis=0)
+                        original_action = np.vstack((original_action, padding_data))
+
+                        # 更新 is_pad，标记越界部分为 1
+                        is_pad[-pad_length:] = 1
+
+                    image_dict = dict()
+                    for cam_name in self.camera_names:
+                        image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts-1:start_ts+1]
+
+        except (OSError, KeyError) as e:
+            # 捕获文件名不匹配或数据键缺失的错误
+            print(f"Warning: Skipping episode {episode_id} due to error: {e}")
+
+        # new axis for different cameras
+        all_cam_images = []
+        for cam_name in self.camera_names:
+            all_cam_images.append(image_dict[cam_name])
+        all_cam_images = np.stack(all_cam_images, axis=0)
+
+        # construct observations
+        image_data = torch.from_numpy(all_cam_images)
+        qpos_data = torch.from_numpy(qpos).float()
+        original_action_data = torch.from_numpy(original_action).float()
+        force_data = torch.from_numpy(force)
+        is_pad = torch.from_numpy(is_pad).bool()
+
+        # channel last
+        image_data = torch.einsum('k ... h w c -> ... k c h w', image_data) #3,n_steps,480,640,3 -> n_steps,3,3,480,640
+
+        # normalize image and change dtype to float
+        image_data = image_data / 255.0
+        qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+        force_data = (force_data - self.norm_stats["force_mean"])/self.norm_stats["force_std"]
+        action_data = (original_action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
+            
+
         return image_data, qpos_data, action_data,force_data,is_pad
 
 def padding(tensor, target_length):
@@ -170,8 +290,30 @@ def get_norm_stats(dataset_dir, num_episodes):
 
     return stats
 
+def stack_camera_images(image_data):
+    """
+    将多个相机的图像张量堆叠为一个张量。
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+    Parameters:
+    - image_data (dict): 包含多个相机图像数据的字典，值是 torch.Tensor。
+
+    Returns:
+    - torch.Tensor: 堆叠后的张量，形状为 (num_cameras, batch_size, channels, height, width)。
+    """
+    # 将所有相机的张量提取到列表中
+    all_cam_images = [tensor for tensor in image_data.values()]
+
+    # 确保所有张量的形状一致
+    for i, tensor in enumerate(all_cam_images):
+        if tensor.shape != all_cam_images[0].shape:
+            raise ValueError(f"Tensor at index {i} has a different shape: {tensor.shape}")
+
+    # 堆叠成一个张量
+    stacked_images = torch.stack(all_cam_images, dim=0)  # 在第 0 维堆叠
+    return stacked_images
+
+
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val,delta_timestamps=None):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -183,13 +325,52 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    if delta_timestamps is None:
+        train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats,delta_timestamps)
+        val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats,delta_timestamps)
+    else:
+        train_dataset = DiffusionDataset(train_indices, dataset_dir, camera_names, norm_stats,delta_timestamps)
+        val_dataset = DiffusionDataset(val_indices, dataset_dir, camera_names, norm_stats,delta_timestamps)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
     return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
 
+def load_previous_and_future_frames(
+    item,
+    dataset,
+    episode_data_index,
+    delta_timestamps
+) :
+    current_idx = item["index"]
+    # get indices of the frames associated to the episode, and their timestamps
+    ep_data_id_from = 0
+    ep_data_id_to = dataset["actions"].shape[0]
+    ep_data_ids = torch.arange(ep_data_id_from, ep_data_id_to, 1)
+
+    for key in delta_timestamps:
+        # get timestamps used as query to retrieve data of previous/future frames
+
+        #print(f"key:{key}")
+        delta_idx = delta_timestamps[key]
+        query_idx = torch.tensor([current_idx + d for d in delta_idx])
+
+
+        # TODO(rcadene): synchronize timestamps + interpolation if needed
+
+        is_pad = (query_idx < ep_data_id_from) | (query_idx >= ep_data_id_to)
+
+        # 将超出范围的索引限制在合法范围内
+        query_idx_clamped = query_idx.clamp(ep_data_id_from, ep_data_id_to - 1)
+
+        # 加载对应帧数据
+        data_ids = ep_data_ids[query_idx_clamped]
+
+        item[key] = dataset[key][data_ids]
+
+        item[f"{key}_is_pad"] = is_pad
+
+    return item
 
 ### env utils
 

@@ -2,7 +2,7 @@ import h5py
 import matplotlib.pyplot as plt
 
 # 替换为你的 HDF5 文件路径
-file_path = "D:\I_love_study\Berkeley_Robot\HK\ACT_FF\data\sim_telepolicy\episode_59.hdf5"
+file_path = "D:\I_love_study\Berkeley_Robot\HK\ACT_FF\data\sim_telepolicy\episode_81.hdf5"
 
 # 打开 HDF5 文件并读取 qpos 数据
 with h5py.File(file_path, 'r') as f:

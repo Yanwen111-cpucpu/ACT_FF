@@ -195,7 +195,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class,policy_config)
-    loading_status = policy.load_state_dict(load_file(ckpt_path))
+    loading_status = policy.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
     print(loading_status)
     policy.to('cpu')
     policy.eval()
@@ -220,11 +220,11 @@ def eval_bc(config, ckpt_name, save_episode=True):
         from sim_env import make_sim_env
         env = make_sim_env(task_name)
         env_max_reward = env.task.max_reward
-
-    query_frequency = policy_config['num_queries']
-    if temporal_agg:
-        query_frequency = 1
-        num_queries = policy_config['num_queries']
+    if policy_class != 'diffusion':
+        query_frequency = policy_config['num_queries']
+        if temporal_agg:
+            query_frequency = 1
+            num_queries = policy_config['num_queries']
 
     max_timesteps = int(max_timesteps * 1) # may increase for real-world tasks
 
@@ -304,7 +304,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 elif config['policy_class'] == 'diffusion':
                     raw_action = policy(qpos, curr_image,force)
                 elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(qpos, curr_image)
+                    raw_action = policy(qpos, curr_image,force)
                 else:
                     raise NotImplementedError
 
@@ -424,7 +424,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data,force_data, is_pad = data
-    image_data, qpos_data, action_data,force_data, is_pad = image_data.to('cpu'), qpos_data.to('cpu'), action_data.to('cpu'),force_data.to('cpu'), is_pad.to('cpu')
+    image_data, qpos_data, action_data,force_data, is_pad = image_data.to('cuda'), qpos_data.to('cuda'), action_data.to('cuda'),force_data.to('cuda'), is_pad.to('cuda')
     return policy(qpos_data, image_data, force_data, action_data, is_pad) # TODO remove None
 
 
@@ -437,7 +437,7 @@ def train_bc(train_dataloader, val_dataloader, config):
 
     set_seed(seed)
     policy = make_policy(policy_class, policy_config)
-    policy.to('cpu')
+    policy.to('cuda')
     optimizer = make_optimizer(policy_class, policy)
 
     train_history = []

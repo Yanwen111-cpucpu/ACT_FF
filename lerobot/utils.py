@@ -15,13 +15,13 @@
 # limitations under the License.
 import torch
 from torch import nn
-
+from collections import deque
 
 def populate_queues(queues, batch):
     for key in batch:
         # Ignore keys not in the queues already (leaving the responsibility to the caller to make sure the
         # queues have the keys they want).
-        if key not in queues:
+        if key not in queues or key == "actions":
             continue
         if len(queues[key]) != queues[key].maxlen:
             # initialize by copying the first observation several times until the queue is full
@@ -30,6 +30,14 @@ def populate_queues(queues, batch):
         else:
             # add latest observation to the queue
             queues[key].append(batch[key])
+    # if all(item is None for item in queues["actions"]):
+    #     # Ensure "observation.state" has at least one valid entry
+    #     if queues["observation.state"] and queues["observation.state"][0] is not None:
+    #         # Replace all None values in actions with the first element of observation.state
+    #         first_state = queues["observation.state"][0][:7]
+    #         # Create a deque with the correct maxlen and fill it with first_state
+    #         queues["actions"] = deque([first_state] * queues["actions"].maxlen, maxlen=queues["actions"].maxlen)
+            
     return queues
 
 

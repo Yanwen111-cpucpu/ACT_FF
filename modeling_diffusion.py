@@ -22,6 +22,7 @@ TODO(alexander-soare):
 
 import math
 from collections import deque
+
 from typing import Callable
 
 import einops
@@ -30,6 +31,8 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 import torchvision
 import torchvision.transforms as transforms
+import time
+
 from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from torch import Tensor, nn
@@ -130,7 +133,7 @@ class DiffusionPolicy(nn.Module):
             # Predicted actions
             actions_hat = self.diffusion.generate_actions(batch)
             #actions_hat = self.unnormalize_outputs({"action": actions_hat})["action"]
-            print(f"actions_shape:{actions.shape},actions_hat_shape:{actions_hat.shape}")
+            #print(f"actions_shape:{actions.shape},actions_hat_shape:{actions_hat.shape}")
 
             curr_action_step=self.config.n_obs_steps-1
             gen_action_steps=curr_action_step+self.config.n_action_steps
@@ -151,17 +154,15 @@ class DiffusionPolicy(nn.Module):
 
         else:  # Inference mode
             # Handle observation caching and action generation
-            if len(self._queues["actions"]) == 0:
-                # Cache observations
-                self._queues = populate_queues(self._queues, batch)
 
-                # Stack observations from the queue
-                stacked_batch = {k: torch.stack(list(self._queues[k]), dim=1) for k in batch if k in self._queues}
-
-                # Generate actions
-                actions = self.diffusion.generate_actions(stacked_batch)
-                #actions = self.unnormalize_outputs({"action": actions})["action"]
-                self._queues["actions"].extend(actions.transpose(0, 1))
+            # Cache observations
+            self._queues = populate_queues(self._queues, batch)
+            # Stack observations from the queue
+            stacked_batch = {k: torch.stack(list(self._queues[k]), dim=1) for k in batch if k in self._queues and k != "actions"}
+            # Generate actions
+            gen_actions = self.diffusion.generate_actions(stacked_batch)
+            #actions = self.unnormalize_outputs({"action": actions})["action"]
+            self._queues["actions"].extend(gen_actions.transpose(0, 1))
 
             # Return the next action from the queue
             action = self._queues["actions"].popleft()
@@ -172,8 +173,6 @@ class DiffusionPolicy(nn.Module):
         Return optimizer for the model (example placeholder).
         """
         return torch.optim.Adam(self.parameters(), lr=1e-4)
-
-
 
 def _make_noise_scheduler(name: str, **kwargs: dict) -> Union[DDPMScheduler, DDIMScheduler]:
     """
@@ -186,7 +185,6 @@ def _make_noise_scheduler(name: str, **kwargs: dict) -> Union[DDPMScheduler, DDI
         return DDIMScheduler(**kwargs)
     else:
         raise ValueError(f"Unsupported noise scheduler type {name}")
-
 
 class DiffusionModel(nn.Module):
     def __init__(self, config: DiffusionConfig):
@@ -230,6 +228,7 @@ class DiffusionModel(nn.Module):
             self.num_inference_steps = config.num_inference_steps
 
     # ========= inference  ============
+    @profile
     def conditional_sample(
         self, 
         batch_size: int, 
@@ -298,6 +297,7 @@ class DiffusionModel(nn.Module):
 
         # Concatenate features then flatten to (B, global_cond_dim).
         return torch.cat(global_cond_feats, dim=-1).flatten(start_dim=1)
+
 
     def generate_actions(self, batch: Dict[str, Tensor]) -> Tensor:
         """
