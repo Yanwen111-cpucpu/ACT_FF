@@ -1,4 +1,5 @@
 from msilib.schema import Class
+from operator import iconcat
 import numpy as np
 import matplotlib.pyplot as plt
 from pyquaternion import Quaternion
@@ -241,7 +242,7 @@ class TelePolicy:
             try:
                 if self.arm is not None:
                     position=self.arm.get_ee_pos()
-                    position_map=max(0,min((360-position)/15,4)/114.29) #映射到slave端，0-3.5cm工作范围 
+                    position_map=max(0,min((360-position)/15,4)/160) #映射到slave端，0-2.5cm工作范围 
                     self.left_gripper = position_map
                     #print(f'left_finger_ctrl:{self.left_gripper}')
                     #print(self.left_gripper)

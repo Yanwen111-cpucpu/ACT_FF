@@ -2,10 +2,12 @@
 <!--    <option timestep='0.0025' iterations="50" tolerance="1e-10" solver="Newton" jacobian="dense" cone="elliptic"/>-->
     <asset>
         <mesh file="tabletop.stl" name="tabletop" scale="0.002 0.002 0.002"/>
+        <mesh file="banana.stl" name="banana" scale="0.001 0.001 0.001"/>
+        <mesh file="cup.stl" name="cup" scale="0.001 0.001 0.001"/>
     </asset>
 
     <visual>
-        <map fogstart="1.5" fogend="5" force="0.1" znear="0.1"/>
+        <map fogstart="1.5" fogend="5" force="0.1" znear="0.03"/>
         <quality shadowsize="4096" offsamples="4"/>
         <headlight ambient="0.4 0.4 0.4"/>
     </visual>
@@ -13,7 +15,7 @@
     <worldbody>
         <light castshadow="false" directional='true' diffuse='.3 .3 .3' specular='0.3 0.3 0.3' pos='-1 -1 1'
                dir='1 1 -1'/>
-        <light directional='true' diffuse='.3 .3 .3' specular='0.3 0.3 0.3' pos='1 -1 1' dir='-1 1 -1'/>
+        <light directional='true' diffuse='.3 .3 .3' specular='0.3 0.3 0.3' pos='0 .6 0.6' dir='0 .6 -1'/>
         <light castshadow="false" directional='true' diffuse='.3 .3 .3' specular='0.3 0.3 0.3' pos='0 1 1'
                dir='0 -1 -1'/>
 
@@ -22,6 +24,24 @@
         </body>
         <body name="midair" pos="0 .6 0.2">
             <site pos="0 0 0" size="0.01" type="sphere" name="midair" rgba="1 0 0 0"/>
+        </body>
+
+        <body name="walls">
+            <!-- 左墙 -->
+            <geom name="left_wall" type="box" pos="-1.35 0.6 0.5" size="0.05 0.9 0.9" rgba="0.5 0.5 0.5 1" 
+            contype="0" conaffinity="0"/>
+
+            <!-- 右墙 -->
+            <geom name="right_wall" type="box" pos="1.35 0.6 0.5" size="0.05 0.9 0.9" rgba="0.5 0.5 0.5 1" 
+            contype="0" conaffinity="0"/>
+
+            <!-- 前墙 -->
+            <geom name="front_wall" type="box" pos="0 1.4 0.5" size="1.2 0.05 0.9" rgba="0.5 0.5 0.5 1" 
+            contype="0" conaffinity="0"/>
+
+            <!-- 后墙 -->
+            <geom name="back_wall" type="box" pos="0 -0.2 0.5" size="1.2 0.05 0.9" rgba="0.5 0.5 0.5 1" 
+            contype="0" conaffinity="0"/>
         </body>
 
         <camera name="left_pillar" pos="-1 0.4 0.6" fovy="78" mode="targetbody" target="table"/>

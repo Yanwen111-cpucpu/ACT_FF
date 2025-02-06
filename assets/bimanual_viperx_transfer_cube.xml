@@ -52,9 +52,19 @@
         <body name="box" pos="0.25 0.9 0.5">
             <joint name="red_box_joint" type="free" frictionloss="0.1" />
             <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.002" />
-            <geom condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="0.007 0.007 0.1" type="box" name="red_box" rgba="1 0 0 1" />
+            <geom condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="0.01 0.01 0.1" type="box" name="red_box" rgba="1 1 1 1" material="wood_material"/>
+            <geom condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 -0.1" size="0.06 0.06 0.02" type="box" name="box_base" rgba="1 1 1 1" material="wood_material"/>
         </body>
-
+        <body name="banana" pos="0.1 0.8 0.3">
+            <joint name="banana_joint" type="free" frictionloss="0.1" />
+            <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.002" />
+            <geom mesh="banana" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="banana_name" rgba="0.8 0.8 0 1"/>
+        </body>
+        <body name="cup" pos="-0.5 0.7 0.2"  quat="0.707 0.707 0 0">
+            <joint name="cup_joint" type="free" frictionloss="0.05"/>
+            <inertial pos="0 0 0" mass="0.05" diaginertia="0.005 0.005 0.005" />
+            <geom mesh="cup" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="cup_name" rgba="0.9 0.9 0.9 1"/>
+        </body>
         <!-- <body name="container" pos="0.25 0.9 0">
 
             <geom name="container_bottom" type="box" size="0.1 0.1 0.01" pos="0 0 0.01" material="container_material"/>
@@ -70,15 +80,15 @@
 
         <body name="target_container" pos="0.7 0.5 0">
             <!-- 底部 -->
-            <geom name="target_bottom" type="box" size="0.15 0.15 0.01" pos="0 0 0.01" material="target_material"/>
+            <geom name="target_bottom" type="box" size="0.15 0.15 0.01" pos="0 0 0.01" material="box_material"/>
             <!-- 左侧 -->
-            <geom name="target_left" type="box" size="0.01 0.15 0.15" pos="-0.15 0 0.06" material="target_material"/>
+            <geom name="target_left" type="box" size="0.01 0.15 0.15" pos="-0.15 0 0.06" material="box_material"/>
             <!-- 右侧 -->
-            <geom name="target_right" type="box" size="0.01 0.15 0.15" pos="0.15 0 0.06" material="target_material"/>
+            <geom name="target_right" type="box" size="0.01 0.15 0.15" pos="0.15 0 0.06" material="box_material"/>
             <!-- 前侧 -->
-            <geom name="target_front" type="box" size="0.15 0.01 0.15" pos="0 -0.15 0.06" material="target_material"/>
+            <geom name="target_front" type="box" size="0.15 0.01 0.15" pos="0 -0.15 0.06" material="box_material"/>
             <!-- 后侧 -->
-            <geom name="target_back" type="box" size="0.15 0.01 0.15" pos="0 0.15 0.06" material="target_material"/>
+            <geom name="target_back" type="box" size="0.15 0.01 0.15" pos="0 0.15 0.06" material="box_material"/>
         </body>
     </worldbody>
 
@@ -91,7 +101,10 @@
 
     <asset>
         <material name="container_material" rgba="0.8 0.8 0.8 1"/>
-        <material name="target_material" rgba="0.5 0.5 0 1"/>
+        <texture name="box_texture" type="2d" file="texture/box.png" />
+        <material name="box_material" texture="box_texture" shininess="0.5" specular="0.3"/>
+        <texture name="wood_texture" type="2d" file="texture/Wood.png" />
+        <material name="wood_material" texture="wood_texture" shininess="0.5" specular="0.3" />
     </asset>
 
     <actuator>
@@ -101,8 +114,8 @@
         <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="joint_4" kp="600"  user="1" forcelimited="true" forcerange="-1000 1000"/>
         <position ctrllimited="true" ctrlrange="-1.8675 2.23402" joint="joint_5" kp="700" user="1" forcelimited="true" forcerange="-180 180"/>
         <position ctrllimited="true" ctrlrange="-3.14158 3.14158" joint="joint_6" kp="250"  user="1"/>
-        <position ctrllimited="true" ctrlrange="0. 0.035" joint="gripper_left_finger" kp="700"  user="1"/>
-        <position ctrllimited="true" ctrlrange="-0.035 0" joint="gripper_right_finger" kp="700" user="1"/>
+        <position ctrllimited="true" ctrlrange="0. 0.025" joint="gripper_left_finger" kp="700"  user="1"/>
+        <position ctrllimited="true" ctrlrange="-0.025 0" joint="gripper_right_finger" kp="700" user="1"/>
         <!-- <general ctrllimited="true" ctrlrange="0. 35" joint="gripper_left_finger" gainprm="10 0"  user="1"/>
         <general ctrllimited="true" ctrlrange="-35 0" joint="gripper_right_finger" gainprm="10 0" user="1"/> -->
 
@@ -116,6 +129,9 @@
         <position ctrllimited="true" ctrlrange="-0.057 -0.021" joint="vx300s_right/right_finger" kp="200"  user="1"/>
     </actuator>
 
+    <visual>
+        <map znear="0.03" zfar="50" />
+    </visual>
 
 
 

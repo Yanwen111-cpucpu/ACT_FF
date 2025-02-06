@@ -41,7 +41,7 @@ def main(args):
         from constants import SIM_TASK_CONFIGS
         task_config = SIM_TASK_CONFIGS[task_name]
     else:
-        from aloha_scripts.constants import TASK_CONFIGS
+        from real_fanuc.constants_real import TASK_CONFIGS
         task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
@@ -187,7 +187,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     if real_robot:
         from aloha_scripts.robot_utils import move_grippers # requires aloha
         from aloha_scripts.real_env import make_real_env # requires aloha
-        env = make_real_env(init_node=True)
+        env = make_real_env(init_node=True) #env中需要有：
         env_max_reward = 0
     else:
         from sim_env import make_sim_env

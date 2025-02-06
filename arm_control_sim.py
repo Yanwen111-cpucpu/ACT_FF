@@ -150,7 +150,7 @@ class DXL_Arm():
                 elif motor_id == 5:
                     motor_angle = (motor_angle - 180)
                 elif motor_id == 6:
-                    motor_angle = -(motor_angle-270)
+                    motor_angle = (motor_angle-270)
                 motor_angles[motor_id-1]=motor_angle/180*3.14
 
             return motor_angles
