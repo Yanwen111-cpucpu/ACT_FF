@@ -1,60 +1,84 @@
+import rclpy
+from rclpy.node import Node
 import pyrealsense2 as rs
 import numpy as np
 import cv2
+from cv_bridge import CvBridge
+from sensor_msgs.msg import Image
 
+class RealSenseCamera(Node):
+    """每个 RealSense 相机的 ROS 2 发布节点"""
+    
+    def __init__(self, serial):
+        super().__init__(f'realsense_camera_{serial}')
+        
+        self.serial = serial
+        self.bridge = CvBridge()
 
-ctx = rs.context()
-serials = []
-devices = ctx.query_devices()
-for dev in devices:
-    dev.hardware_reset()
+        # 话题名称：camera_{serial}/image_raw
+        self.publisher = self.create_publisher(Image, f'camera_{serial}/image_raw', 10)
 
-if len(ctx.devices) > 0:
-    for dev in ctx.devices:
-        print('Found device:', dev.get_info(rs.camera_info.name), dev.get_info(rs.camera_info.serial_number))
-        serials.append(dev.get_info(rs.camera_info.serial_number))
-else:
-    print("No Intel Device connected")
+        # 初始化 RealSense 相机
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_device(serial)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
-pipelines = []
-windows = []
+        self.pipeline.start(config)
+        self.get_logger().info(f'RealSense Camera {serial} started, publishing to camera_{serial}/image_raw')
 
-for serial in serials:
-    pipe = rs.pipeline(ctx)
-    cfg = rs.config()
-    cfg.enable_device(serial)
-    cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    pipe.start(cfg)
-    pipelines.append(pipe)
+        # 50Hz 采样频率（20ms ）
+        self.timer = self.create_timer(0.02, self.capture_and_publish)
 
-    window_name = f"Camera {serial}"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    windows.append(window_name)
+    def capture_and_publish(self):
+        """获取相机帧并发布到 ROS 2 话题"""
+        frames = self.pipeline.wait_for_frames()
+        color_frame = frames.get_color_frame()
 
-try:
-    while True:
-        for pipe, window_name in zip(pipelines, windows):
-            frames = pipe.wait_for_frames()
-            depth_frame = frames.get_depth_frame()
-            color_frame = frames.get_color_frame()
-            if not depth_frame or not color_frame:
-                continue
+        if not color_frame:
+            return
 
-            depth_image = np.asanyarray(depth_frame.get_data())
-            color_image = np.asanyarray(color_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
 
-            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.5), cv2.COLORMAP_JET)
+        # 转换 OpenCV 图像为 ROS 2 消息
+        ros_image = self.bridge.cv2_to_imgmsg(color_image, encoding='bgr8')
 
-            cv2.imshow(window_name, color_image)
-            cv2.imshow(window_name + " Depth", depth_colormap)
+        # 发布到 ROS 2
+        self.publisher.publish(ros_image)
+        self.get_logger().info(f'Published image from camera {self.serial}')
 
-        key = cv2.waitKey(1)
-        if key == 27:  # ESC key
-            break
+    def stop_camera(self):
+        """停止相机"""
+        self.pipeline.stop()
 
-finally:
-    for pipe in pipelines:
-        pipe.stop()
+def main(args=None):
+    rclpy.init(args=args)
 
-    cv2.destroyAllWindows()
+    ctx = rs.context()
+    devices = ctx.query_devices()
+    serials = [dev.get_info(rs.camera_info.serial_number) for dev in devices]
+
+    if not serials:
+        print("❌ No Intel RealSense devices found!")
+        return
+
+    # 创建多个相机 ROS 2 节点
+    nodes = [RealSenseCamera(serial) for serial in serials]
+    executor = rclpy.executors.MultiThreadedExecutor()
+
+    for node in nodes:
+        executor.add_node(node)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        print("Shutting down...")
+    finally:
+        for node in nodes:
+            node.stop_camera()
+            node.destroy_node()
+
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

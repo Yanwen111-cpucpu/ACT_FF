@@ -12,27 +12,27 @@ def send_udp_data(ip, port, data_array, frequency_hz):
 
         print(f"Sending UDP data to {ip}:{port} at {frequency_hz} Hz")
 
-        while True:
-            start_time = time.time()
+        start_time = time.time()
 
-            try:
-                packed_data = struct.pack("<6d", *data_array)  # Pack as little-endian doubles
-                sock.sendto(packed_data, (ip, port))
-                #print("Data sent.") # Optional: print each time data is sent
+        try:
+            packed_data = struct.pack("<6d", *data_array)  # Pack as little-endian doubles
+            sock.sendto(packed_data, (ip, port))
+            #print("Data sent.") # Optional: print each time data is sent
 
-            except Exception as e:
-                print(f"Error sending data: {e}")
+        except Exception as e:
+            print(f"Error sending data: {e}")
 
-            end_time = time.time()
-            elapsed_time = end_time - start_time
+        end_time = time.time()
+        elapsed_time = end_time - start_time
 
-            target_delay = 1.0 / frequency_hz
-            actual_delay = target_delay - elapsed_time
+        target_delay = 1.0 / frequency_hz
+        actual_delay = target_delay - elapsed_time
 
-            if actual_delay > 0:
-                time.sleep(actual_delay)
-            #else:
-            #    print("Warning: Could not maintain desired frequency.")
+        if actual_delay > 0:
+            time.sleep(actual_delay)
+            print(f"sleep for {actual_delay}")
+        #else:
+        #    print("Warning: Could not maintain desired frequency.")
 
     except socket.error as e:
         print(f"Socket error: {e}")
@@ -52,6 +52,11 @@ if __name__ == "__main__":
     frequency = 50  # Hz
 
     # Example data (replace with your actual data)
-    my_data = [0, 0, 0, 0, -90, 0]
+    while True:
+        my_data = [0, 0, 0, 0, -90, 0]
 
-    send_udp_data(target_ip, target_port, my_data, frequency)
+        send_udp_data(target_ip, target_port, my_data, frequency)
+        time.sleep(5)
+        my_data = [0,0,0,0,0,0]
+        send_udp_data(target_ip, target_port, my_data, frequency)
+        time.sleep(5)

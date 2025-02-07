@@ -8,7 +8,7 @@ def receive_udp_message(local_ip, port, frequency_hz):
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((local_ip, port))
+        sock.bind(("0.0.0.0", port))
         sock.settimeout(0.01) # Set a timeout to prevent blocking
 
         print(f"Listening for UDP messages on {local_ip}:{port} at {frequency_hz} Hz")
