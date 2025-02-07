@@ -38,10 +38,10 @@
                 </body>
                 <body name="root" pos="0 0 -0.068" quat="1 0 0 0">
                   <camera name="gripper_top" pos="0 0.25 0.18" xyaxes="1 0 0 0 0.9397 -0.3420"/>
-                  <geom type="mesh"  mesh="gripper_base_link"  group="1"  />
-                  <geom pos="0 0 -0.002" type="mesh"  mesh="gripper_base_1"  group="1"  />
-                  <geom type="mesh" mesh="gripper_base_1" pos="0 0 -0.002" />
-                  <geom pos="0 0 -0.0145" type="mesh"  mesh="motor"  group="1"  />
+                  <geom type="mesh"  mesh="gripper_base_link" rgba="0 0 0 1"  group="1"  />
+                  <geom pos="0 0 -0.002" type="mesh"  mesh="gripper_base_1" rgba="0 0 0 1" group="1"  />
+                  <geom type="mesh" mesh="gripper_base_1" rgba="0.314 0.357 0.318 1" pos="0 0 -0.002" />
+                  <geom pos="0 0 -0.0145" type="mesh"  mesh="motor" rgba="0.314 0.357 0.318 1" group="1"  />
                   <geom pos="0 -0.0054043 -0.053" type="mesh"  mesh="track"  group="1"  />
                   <site name="gripper_spring_site" pos="0 0 0" size="0.005" type="sphere" rgba="0 1 0 1"/>
                   <body name="left_finger" pos="-0.034 0 -0.075">

@@ -79,6 +79,9 @@ class RealEnv:
         right_robot_effort = right_effort_raw[:7]
         return np.concatenate([left_robot_effort, right_robot_effort])
 
+    def get_force(self):
+        return self.recorder_left.gripper_force
+
     def get_images(self):
         return self.image_recorder.get_images()
 
@@ -103,8 +106,9 @@ class RealEnv:
     def get_observation(self):
         obs = collections.OrderedDict()
         obs['qpos'] = self.get_qpos()
-        obs['qvel'] = self.get_qvel()
+        #obs['qvel'] = self.get_qvel()
         obs['effort'] = self.get_effort()
+        obs['c_force'] = self.get_force()
         obs['images'] = self.get_images()
         return obs
 

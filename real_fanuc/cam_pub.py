@@ -15,8 +15,12 @@ class RealSenseCamera(Node):
         self.serial = serial
         self.bridge = CvBridge()
 
+        if serial == "332322070892":
+            cam_name = "gripper_top"
+        elif serial == "332522076772":
+            cam_name = "top"
         # 话题名称：camera_{serial}/image_raw
-        self.publisher = self.create_publisher(Image, f'camera_{serial}/image_raw', 10)
+        self.publisher = self.create_publisher(Image, f'camera_{cam_name}/image_raw', 10)
 
         # 初始化 RealSense 相机
         self.pipeline = rs.pipeline()

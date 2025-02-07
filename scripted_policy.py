@@ -161,6 +161,8 @@ class TelePolicy:
     def __init__(self,env,inject_noise=False):
         #self.motor= dxl_motor_control_sim.DynamixelMotor() #末端夹爪控制
         self.arm=arm_control_sim.DXL_Arm() #EE is included
+        if self.arm == None:
+            return
         self.env=env
         # self.gripper_pos_queue = motor_control_sim.gripper_pos_queue
         # self.feedback_queue = motor_control_sim.feedback_queue
@@ -367,7 +369,7 @@ class TelePolicy:
 
             # 如果遍历完成没有检测到接触，返回 False
             #print("[DEBUG] No contact detected between grippers and objects")
-            return False
+        return False
 
     def signal_handler(self,sig, frame):
         print("Stopping TelePolicy...")

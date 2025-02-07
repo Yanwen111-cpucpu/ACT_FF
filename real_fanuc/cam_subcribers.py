@@ -13,7 +13,11 @@ class CameraSubscriber(Node):
         self.windows = {}
 
         for serial in serials:
-            topic_name = f'/camera_{serial}/image_raw'
+            if serial =="332322070892":
+                cam_name='gripper_top'
+            elif serial =="332522076772":
+                cam_name='top'
+            topic_name = f'/camera_{cam_name}/image_raw'
             self.get_logger().info(f'Subscribing to {topic_name}')
             
             sub = self.create_subscription(
@@ -24,7 +28,7 @@ class CameraSubscriber(Node):
             )
             self.subscribers.append(sub)
 
-            window_name = f'Camera {serial}'
+            window_name = cam_name
             self.windows[serial] = window_name
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 

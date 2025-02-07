@@ -1,7 +1,9 @@
 import numpy as np
 import time
 from constants import DT
-from interbotix_xs_msgs.msg import JointSingleCommand
+from gripper_controller import GripperController
+from fanuc_controller import FanucCmd, FanucPub
+from std_msgs.msg import Float64MultiArray, Float64, Int32
 
 import IPython
 e = IPython.embed
@@ -14,24 +16,28 @@ class ImageRecorder:
         from sensor_msgs.msg import Image
         self.is_debug = is_debug
         self.bridge = CvBridge()
-        self.camera_names = ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
+        self.serials= ['332322070892',"332522076772"]
+        self.camera_names=['gripper_top','top']
+
         if init_node:
             rospy.init_node('image_recorder', anonymous=True)
-        for cam_name in self.camera_names:
+        for serial in self.serials:
+            if serial =="332322070892":
+                cam_name='gripper_top'
+            elif serial =="332522076772":
+                cam_name='top'
+            else:
+                raise NotImplementedError
             setattr(self, f'{cam_name}_image', None)
             setattr(self, f'{cam_name}_secs', None)
             setattr(self, f'{cam_name}_nsecs', None)
-            if cam_name == 'cam_high':
-                callback_func = self.image_cb_cam_high
-            elif cam_name == 'cam_low':
-                callback_func = self.image_cb_cam_low
-            elif cam_name == 'cam_left_wrist':
-                callback_func = self.image_cb_cam_left_wrist
-            elif cam_name == 'cam_right_wrist':
-                callback_func = self.image_cb_cam_right_wrist
+            if cam_name == 'cam_wrist':
+                callback_func = self.image_cb_cam_wrist
+            elif cam_name == 'cam_top':
+                callback_func = self.image_cb_cam_top
             else:
                 raise NotImplementedError
-            rospy.Subscriber(f"/usb_{cam_name}/image_raw", Image, callback_func)
+            rospy.Subscriber(f'/camera_{cam_name}/image_raw', Image, callback_func)
             if self.is_debug:
                 setattr(self, f'{cam_name}_timestamps', deque(maxlen=50))
         time.sleep(0.5)
@@ -40,24 +46,15 @@ class ImageRecorder:
         setattr(self, f'{cam_name}_image', self.bridge.imgmsg_to_cv2(data, desired_encoding='passthrough'))
         setattr(self, f'{cam_name}_secs', data.header.stamp.secs)
         setattr(self, f'{cam_name}_nsecs', data.header.stamp.nsecs)
-        # cv2.imwrite('/home/tonyzhao/Desktop/sample.jpg', cv_image)
         if self.is_debug:
             getattr(self, f'{cam_name}_timestamps').append(data.header.stamp.secs + data.header.stamp.secs * 1e-9)
 
-    def image_cb_cam_high(self, data):
-        cam_name = 'cam_high'
+    def image_cb_cam_wrist(self, data):
+        cam_name = 'gripper_top'
         return self.image_cb(cam_name, data)
 
-    def image_cb_cam_low(self, data):
-        cam_name = 'cam_low'
-        return self.image_cb(cam_name, data)
-
-    def image_cb_cam_left_wrist(self, data):
-        cam_name = 'cam_left_wrist'
-        return self.image_cb(cam_name, data)
-
-    def image_cb_cam_right_wrist(self, data):
-        cam_name = 'cam_right_wrist'
+    def image_cb_cam_top(self, data):
+        cam_name = 'top'
         return self.image_cb(cam_name, data)
 
     def get_images(self):
@@ -88,14 +85,21 @@ class Recorder:
         self.qpos = None
         self.effort = None
         self.arm_command = None
+        self.gripper_force = None
         self.gripper_command = None
+        self.gripper_state = None
         self.is_debug = is_debug
+
+        #待启动：FanucPub(robot_state)、FanucCmd(robot_cmd#TODO)、gripper_controller(gripper_state、gripper_pos)、gripper_cmd#TODO、camera_pub
 
         if init_node:
             rospy.init_node('recorder', anonymous=True)
-        rospy.Subscriber(f"/puppet_{side}/joint_states", JointState, self.puppet_state_cb)
-        rospy.Subscriber(f"/puppet_{side}/commands/joint_group", JointGroupCommand, self.puppet_arm_commands_cb)
-        rospy.Subscriber(f"/puppet_{side}/commands/joint_single", JointSingleCommand, self.puppet_gripper_commands_cb)
+        rospy.Subscriber(f"/robot_state'", Float64MultiArray, self.puppet_state_cb)
+        rospy.Subscriber(f"/robot_cmd", JointGroupCommand, self.puppet_arm_commands_cb) #TODO
+        rospy.Subscriber(f"/gripper_state", Int32, self.puppet_gripper_force_cb)
+        rospy.Subscriber(f"/gripper_state", Float64, self.puppet_gripper_state_cb)
+        rospy.Subscriber(f"/gripper_cmd", JointSingleCommand, self.puppet_gripper_commands_cb) #TODO
+
         if self.is_debug:
             self.joint_timestamps = deque(maxlen=50)
             self.arm_command_timestamps = deque(maxlen=50)
@@ -103,20 +107,25 @@ class Recorder:
         time.sleep(0.1)
 
     def puppet_state_cb(self, data):
-        self.qpos = data.position
-        self.qvel = data.velocity
-        self.effort = data.effort
-        self.data = data
+        self.qpos = data
+        #self.qvel = data.velocity
+        #self.effort = data.effort
         if self.is_debug:
             self.joint_timestamps.append(time.time())
 
     def puppet_arm_commands_cb(self, data):
-        self.arm_command = data.cmd
+        self.arm_command = data
         if self.is_debug:
             self.arm_command_timestamps.append(time.time())
 
+    def puppet_gripper_force_cb(self, data):
+        self.gripper_force = data
+
+    def puppet_gripper_state_cb(self, data):
+        self.gripper_state = data
+
     def puppet_gripper_commands_cb(self, data):
-        self.gripper_command = data.cmd
+        self.gripper_command = data
         if self.is_debug:
             self.gripper_command_timestamps.append(time.time())
 
@@ -149,13 +158,12 @@ def move_arms(bot_list, target_pose_list, move_time=1):
         time.sleep(DT)
 
 def move_grippers(bot_list, target_pose_list, move_time):
-    gripper_command = JointSingleCommand(name="gripper")
     num_steps = int(move_time / DT)
     curr_pose_list = [get_arm_gripper_positions(bot) for bot in bot_list]
     traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in zip(curr_pose_list, target_pose_list)]
     for t in range(num_steps):
         for bot_id, bot in enumerate(bot_list):
-            gripper_command.cmd = traj_list[bot_id][t]
+            gripper_command = traj_list[bot_id][t]
             bot.gripper.core.pub_single.publish(gripper_command)
         time.sleep(DT)
 

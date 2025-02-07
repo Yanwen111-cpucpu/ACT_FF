@@ -3,6 +3,7 @@
     <include file="vx300s_dependencies.xml"/>
     <include file="fanuc_inner/fanuc_dependencies.xml" />
     <include file="SL_Assets/Gripper_sl.xml" /> 
+    
     <option timestep="0.001"/>
     <option cone="elliptic" impratio="0.2"/>
     <!-- <option multiccd="enable" /> -->
@@ -60,10 +61,15 @@
             <inertial pos="0 0 0" mass="0.05" diaginertia="0.002 0.002 0.002" />
             <geom mesh="banana" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="banana_name" rgba="0.8 0.8 0 1"/>
         </body>
-        <body name="cup" pos="-0.5 0.7 0.2"  quat="0.707 0.707 0 0">
+        <body name="cup" pos="-0.5 0.9 0.2"  quat="0 0.707 0 0.707">
             <joint name="cup_joint" type="free" frictionloss="0.05"/>
             <inertial pos="0 0 0" mass="0.05" diaginertia="0.005 0.005 0.005" />
-            <geom mesh="cup" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="cup_name" rgba="0.9 0.9 0.9 1"/>
+            <geom mesh="cup" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="cup_name" rgba="0.9 0.9 0.9 1" material="cup_material"/>
+        </body>
+        <body name="teddy" pos="-0.6 0.9 0.2"  quat="0.707 0.707 0 0">
+            <joint name="teddy_joint" type="free" frictionloss="0.05"/>
+            <inertial pos="0 0 0" mass="0.05" diaginertia="0.005 0.005 0.005" />
+            <geom mesh="teddy" condim="4" solimp="2 1 0.01" solref="0.01 1" friction="1.5 0.5 0.0001" pos="0 0 0" size="1 1 1" type="mesh" name="teddy_name" rgba="1 1 1 1" material="teddy_material"/>
         </body>
         <!-- <body name="container" pos="0.25 0.9 0">
 
@@ -105,6 +111,10 @@
         <material name="box_material" texture="box_texture" shininess="0.5" specular="0.3"/>
         <texture name="wood_texture" type="2d" file="texture/Wood.png" />
         <material name="wood_material" texture="wood_texture" shininess="0.5" specular="0.3" />
+        <texture name="cup_texture" type="2d" file="texture/cup.png" />
+        <material name="cup_material" texture="cup_texture" shininess="0.5" specular="0.3" />
+        <texture name="teddy_texture" type="2d" file="texture/teddy.png" />
+        <material name="teddy_material" texture="teddy_texture" shininess="0.3" specular="0.3" />
     </asset>
 
     <actuator>

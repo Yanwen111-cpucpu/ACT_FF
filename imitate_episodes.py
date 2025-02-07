@@ -185,8 +185,8 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     # load environment
     if real_robot:
-        from aloha_scripts.robot_utils import move_grippers # requires aloha
-        from aloha_scripts.real_env import make_real_env # requires aloha
+        from real_fanuc.robot_utils import move_grippers # requires aloha
+        from real_fanuc.real_env import make_real_env # requires aloha
         env = make_real_env(init_node=True) #env中需要有：
         env_max_reward = 0
     else:
