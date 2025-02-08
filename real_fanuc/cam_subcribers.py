@@ -1,31 +1,30 @@
-import rclpy
-from rclpy.node import Node
+import rospy
 import cv2
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
-class CameraSubscriber(Node):
+class CameraSubscriber:
+    """ 订阅 RealSense 相机的 ROS 1 节点 """
+    
     def __init__(self, serials):
-        super().__init__('camera_subscriber')
-
+        rospy.init_node('camera_subscriber', anonymous=True)
         self.bridge = CvBridge()
         self.subscribers = []
         self.windows = {}
+        self.latest_images = {serial: None for serial in serials}
 
         for serial in serials:
-            if serial =="332322070892":
-                cam_name='gripper_top'
-            elif serial =="332522076772":
-                cam_name='top'
+            if serial == "332322070892":
+                cam_name = "gripper_top"
+            elif serial == "332522076772":
+                cam_name = "top"
+            else:
+                cam_name = f"camera_{serial}"
+
             topic_name = f'/camera_{cam_name}/image_raw'
-            self.get_logger().info(f'Subscribing to {topic_name}')
+            rospy.loginfo(f'Subscribing to {topic_name}')
             
-            sub = self.create_subscription(
-                Image,
-                topic_name,
-                lambda msg, serial=serial: self.image_callback(msg, serial),
-                10
-            )
+            sub = rospy.Subscriber(topic_name, Image, self.image_callback, callback_args=serial)
             self.subscribers.append(sub)
 
             window_name = cam_name
@@ -33,28 +32,29 @@ class CameraSubscriber(Node):
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     def image_callback(self, msg, serial):
+        """ 处理接收到的 ROS 图像数据 """
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            cv2.imshow(self.windows[serial], cv_image)
-            cv2.waitKey(1)
+            self.latest_images[serial] = cv_image  # 存储最新图像
         except Exception as e:
-            self.get_logger().error(f"Error converting image from {serial}: {e}")
+            rospy.logerr(f"Error converting image from {serial}: {e}")
 
-def main(args=None):
-    rclpy.init(args=args)
-    
-    # 替换成你相机的实际序列号
-    serials = ['332322070892',"332522076772"]  # 示例相机序列号
-    node = CameraSubscriber(serials)
-
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        node.get_logger().info("Shutting down camera subscriber...")
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    def show_images(self):
+        """ 循环显示订阅到的相机图像 """
+        rate = rospy.Rate(20)  # 10 Hz
+        while not rospy.is_shutdown():
+            for serial, image in self.latest_images.items():
+                if image is not None:
+                    cv2.imshow(self.windows[serial], image)
+            cv2.waitKey(1)  # 确保窗口刷新
+            rate.sleep()
         cv2.destroyAllWindows()
+
+
+def main():
+    serials = ['332322070892', '332522076772']  # 替换为实际相机序列号
+    sub = CameraSubscriber(serials)
+    sub.show_images()
 
 if __name__ == '__main__':
     main()

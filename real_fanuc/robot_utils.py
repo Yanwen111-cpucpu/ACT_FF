@@ -31,9 +31,9 @@ class ImageRecorder:
             setattr(self, f'{cam_name}_image', None)
             setattr(self, f'{cam_name}_secs', None)
             setattr(self, f'{cam_name}_nsecs', None)
-            if cam_name == 'cam_wrist':
+            if cam_name == 'gripper_top':
                 callback_func = self.image_cb_cam_wrist
-            elif cam_name == 'cam_top':
+            elif cam_name == 'top':
                 callback_func = self.image_cb_cam_top
             else:
                 raise NotImplementedError

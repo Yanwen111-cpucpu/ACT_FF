@@ -1,24 +1,19 @@
-import rclpy
-from rclpy.node import Node
-import socket
-import struct
-from std_msgs.msg import Float64MultiArray, Float64, Int32
-import numpy as np
+# gripper_controller.py (ROS 1 Version based on Manual)
+import rospy
 import minimalmodbus
 import serial
+from std_msgs.msg import Float64, Int32
 
-class GripperController(Node):
+class GripperController:
     def __init__(self):
-        super().__init__('gripper_controller')
-        self.subscription = self.create_subscription(
-            Float64, '/gripper_cmd', self.control_gripper, 10)
-        self.publisher = self.create_publisher(Int32, '/gripper_state', 10)
-        self.position_publisher = self.create_publisher(Float64, '/gripper_pos', 10)
-
-        self.get_logger().info('Listening for gripper commands on /gripper_cmd')
+        rospy.init_node('gripper_controller', anonymous=True)
         
+        self.subscriber = rospy.Subscriber('/gripper_cmd', Float64, self.control_gripper)
+        self.state_publisher = rospy.Publisher('/gripper_state', Int32, queue_size=10)
+        self.position_publisher = rospy.Publisher('/gripper_pos', Float64, queue_size=10)
+
         self.device_address = 1
-        self.port = 'COM13'
+        self.port = '/dev/ttyUSB0'  # Ubuntu 下的串口设备
         self.baudrate = 115200
         
         self.instrument = minimalmodbus.Instrument(self.port, self.device_address)
@@ -29,32 +24,45 @@ class GripperController(Node):
         self.instrument.serial.timeout = 1
         self.instrument.mode = minimalmodbus.MODE_RTU
         
-        self.timer = self.create_timer(0.3, self.check_gripper_status)  # 每0.3秒检测一次夹爪状态
-    
+        rospy.Timer(rospy.Duration(0.3), self.check_gripper_status)
+        rospy.loginfo('Gripper controller node started.')
+
+        # 初始化夹爪
+        self.initialize_gripper()
+
+    def initialize_gripper(self):
+        try:
+            rospy.loginfo("Initializing gripper...")
+            self.instrument.write_register(0x0000, 1, functioncode=6)
+            rospy.sleep(2)
+        except Exception as e:
+            rospy.logerr(f'Error initializing gripper: {e}')
+
     def control_gripper(self, msg):
         position = msg.data
-        if not (0 <= position <= 0.025):
-            self.get_logger().warn('Gripper position out of range (0-50 mm)')
+        if not (0 <= position <= 0.050):
+            rospy.logwarn('Gripper position out of range (0-50 mm)')
             return
         try:
-            self.instrument.write_float(0x0002, position*1000)
-            self.get_logger().info(f'Set gripper position to {position} mm')
-             # 读取夹爪位置
-            position = self.instrument.read_float(0x0042)  # 读取夹爪当前位置
-            pos_msg = Float64()
-            pos_msg.data = position
+            self.instrument.write_registers(0x0002, [int(position * 1000), 0])
+            rospy.loginfo(f'Set gripper position to {position} mm')
+            pos_data = self.instrument.read_registers(0x0042, 2)
+            pos_msg = Float64(data=pos_data[0] / 1000.0)
             self.position_publisher.publish(pos_msg)
-            self.get_logger().info(f'Gripper position: {position} mm')
         except Exception as e:
-            self.get_logger().error(f'Error reading gripper data: {e}')
-    
-    def check_gripper_status(self):
+            rospy.logerr(f'Error setting gripper position: {e}')
+
+    def check_gripper_status(self, event):
         try:
-            status = self.instrument.read_register(0x0041, 0)  # 读取夹持状态
-            gripper_state = 1 if status == 2 else 0  # 2 = 夹持物体，其他 = 未夹持
-            msg = Int32()
-            msg.data = gripper_state
-            self.publisher.publish(msg)
-            self.get_logger().info(f'Gripper state: {gripper_state}')
+            status = self.instrument.read_register(0x0041, 0)
+            gripper_state = 1 if status == 2 else 0
+            self.state_publisher.publish(Int32(data=gripper_state))
         except Exception as e:
-            self.get_logger().error(f'Error reading gripper state: {e}')
+            rospy.logerr(f'Error reading gripper state: {e}')
+
+if __name__ == '__main__':
+    try:
+        GripperController()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
