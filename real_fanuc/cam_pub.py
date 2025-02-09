@@ -27,7 +27,7 @@ class RealSenseCamera:
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_device(serial)
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 25)
 
         self.pipeline.start(config)
         rospy.loginfo(f'RealSense Camera {serial} started, publishing to camera_{cam_name}/image_raw')
@@ -66,7 +66,7 @@ def main():
         return
 
     cameras = [RealSenseCamera(serial) for serial in serials]
-    rate = rospy.Rate(50)  # 50Hz 采样频率
+    rate = rospy.Rate(25)  # 25Hz 采样频率
     
     try:
         while not rospy.is_shutdown():

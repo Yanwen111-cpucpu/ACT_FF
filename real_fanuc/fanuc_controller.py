@@ -4,33 +4,45 @@ import socket
 import struct
 import numpy as np
 from std_msgs.msg import Float64MultiArray
+import atexit
 
-class FanucCmd:
-    """ 订阅 /robot_cmd 并通过 UDP 发送给 Fanuc 机器人 """
+class FanucController:
     
     def __init__(self):
-        rospy.init_node('fanuc_sender', anonymous=True)
         
-        self.target_ip = rospy.get_param('~target_ip', '192.168.1.100')
-        self.target_port = rospy.get_param('~target_port', 3827)
-        self.frequency = rospy.get_param('~frequency', 50)
-        
+        # 获取 ROS 参数，带默认值，避免获取失败
+        self.target_ip = '192.168.1.100'
+        self.target_port = 3827
+        self.frequency = 50
+
+        # 初始化 UDP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         
-        self.subscriber = rospy.Subscriber('/robot_cmd', Float64MultiArray, self.send_udp_data)
-        rospy.loginfo(f'Listening for commands on /robot_cmd')
-    
-    def send_udp_data(self, msg):
-        if len(msg.data) != 6:
-            rospy.logwarn('Received incorrect data length')
+
+        atexit.register(self.cleanup)  # 兼容非 ROS 退出
+
+    def send_udp_data(self,data):
+        """ 处理 ROS 订阅消息，并通过 UDP 发送 """
+        if len(data) != 6:
+            print('Received incorrect data length')
             return
         try:
-            msg_array = np.array(msg.data) / 3.14 * 180  # 角度转换
+            # **确保数据类型正确**
+            msg_array = np.array(data, dtype=np.float64) / 3.14 * 180  # 角度转换
+            
+            # **确保 struct.pack 数据匹配**
             packed_data = struct.pack('<6d', *msg_array)
+            
+            # **UDP 发送**
             self.sock.sendto(packed_data, (self.target_ip, self.target_port))
-            rospy.loginfo(f'Sent: {msg_array.tolist()}')
         except Exception as e:
             rospy.logerr(f'Error sending data: {e}')
+
+    def cleanup(self):
+        """ 退出时关闭 socket """
+        if hasattr(self, 'sock'):
+            self.sock.close()
+
 
 
 class FanucPub:
@@ -47,7 +59,7 @@ class FanucPub:
         self.sock.bind((self.local_ip, self.port))
         self.sock.settimeout(0.01)
         
-        self.publisher = rospy.Publisher('/robot_state', Float64MultiArray, queue_size=10)
+        self.publisher = rospy.Publisher('/robot_state', Float64MultiArray, queue_size=10) #degree or radius?
         self.rate = rospy.Rate(self.frequency)
         
         rospy.loginfo(f'Listening for UDP messages on {self.local_ip}:{self.port}')
@@ -75,7 +87,7 @@ class FanucPub:
 
 
 def main():
-    sender = FanucCmd()
+    sender = FanucController()
     receiver = FanucPub()
     
     try:

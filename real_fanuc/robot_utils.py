@@ -1,84 +1,89 @@
+import rospy
+import threading
 import numpy as np
 import time
-from constants import DT
-from gripper_controller import GripperController
-from fanuc_controller import FanucCmd, FanucPub
+from collections import deque
 from std_msgs.msg import Float64MultiArray, Float64, Int32
-
-import IPython
-e = IPython.embed
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+from constants import DT
+from fanuc_controller import FanucController
 
 class ImageRecorder:
     def __init__(self, init_node=True, is_debug=False):
-        from collections import deque
-        import rospy
-        from cv_bridge import CvBridge
-        from sensor_msgs.msg import Image
         self.is_debug = is_debug
         self.bridge = CvBridge()
-        self.serials= ['332322070892',"332522076772"]
-        self.camera_names=['gripper_top','top']
+        self.serials = ['332322070892', "332522076772"]
+        self.camera_names = ['gripper_top', 'top']
+        self.lock = threading.Lock()
 
         if init_node:
             rospy.init_node('image_recorder', anonymous=True)
-        for serial in self.serials:
-            if serial =="332322070892":
-                cam_name='gripper_top'
-            elif serial =="332522076772":
-                cam_name='top'
-            else:
-                raise NotImplementedError
-            setattr(self, f'{cam_name}_image', None)
-            setattr(self, f'{cam_name}_secs', None)
-            setattr(self, f'{cam_name}_nsecs', None)
-            if cam_name == 'gripper_top':
-                callback_func = self.image_cb_cam_wrist
-            elif cam_name == 'top':
-                callback_func = self.image_cb_cam_top
-            else:
-                raise NotImplementedError
-            rospy.Subscriber(f'/camera_{cam_name}/image_raw', Image, callback_func)
-            if self.is_debug:
-                setattr(self, f'{cam_name}_timestamps', deque(maxlen=50))
-        time.sleep(0.5)
+
+        # 存储图像数据
+        self.images = {name: None for name in self.camera_names}
+        self.timestamps = {name: None for name in self.camera_names}
+
+        # 订阅 ROS 话题
+        self.subscribers = {}
+        for serial, cam_name in zip(self.serials, self.camera_names):
+            topic = f'/camera_{cam_name}/image_raw'
+            self.subscribers[cam_name] = rospy.Subscriber(topic, Image, lambda data, name=cam_name: self.image_cb(name, data))
+
+        # 记录时间戳（调试用）
+        if self.is_debug:
+            self.debug_timestamps = {name: deque(maxlen=50) for name in self.camera_names}
+
+        # 启动监听线程
+        self.running = True
+        self.thread = threading.Thread(target=self.listen_loop)
+        self.thread.daemon = True
+        self.thread.start()
 
     def image_cb(self, cam_name, data):
-        setattr(self, f'{cam_name}_image', self.bridge.imgmsg_to_cv2(data, desired_encoding='passthrough'))
-        setattr(self, f'{cam_name}_secs', data.header.stamp.secs)
-        setattr(self, f'{cam_name}_nsecs', data.header.stamp.nsecs)
+        """图像回调函数，更新最新图像数据"""
+        with self.lock:
+            self.images[cam_name] = self.bridge.imgmsg_to_cv2(data, desired_encoding='passthrough')
+            self.timestamps[cam_name] = (data.header.stamp.secs, data.header.stamp.nsecs)
         if self.is_debug:
-            getattr(self, f'{cam_name}_timestamps').append(data.header.stamp.secs + data.header.stamp.secs * 1e-9)
+            self.debug_timestamps[cam_name].append(data.header.stamp.secs + data.header.stamp.nsecs * 1e-9)
 
-    def image_cb_cam_wrist(self, data):
-        cam_name = 'gripper_top'
-        return self.image_cb(cam_name, data)
-
-    def image_cb_cam_top(self, data):
-        cam_name = 'top'
-        return self.image_cb(cam_name, data)
+    def listen_loop(self):
+        """ROS监听循环，保持 `subscriber` 持续运行"""
+        rate = rospy.Rate(20)  # 20Hz 更新
+        try:
+            while self.running and not rospy.is_shutdown():
+                rate.sleep()
+        except KeyboardInterrupt:
+            print(f"\n[INFO] {self.__class__.__name__} stopped by Ctrl+C.")
+            self.running = False
 
     def get_images(self):
-        image_dict = dict()
-        for cam_name in self.camera_names:
-            image_dict[cam_name] = getattr(self, f'{cam_name}_image')
-        return image_dict
+        """返回最新的图像数据"""
+        with self.lock:
+            return {name: self.images[name] for name in self.camera_names}
+
+    def stop(self):
+        """停止监听线程"""
+        self.running = False
+        self.thread.join()
 
     def print_diagnostics(self):
-        def dt_helper(l):
-            l = np.array(l)
-            diff = l[1:] - l[:-1]
-            return np.mean(diff)
+        """打印相机的采样频率"""
+        def dt_helper(timestamps):
+            ts = np.array(timestamps)
+            return np.mean(ts[1:] - ts[:-1]) if len(ts) > 1 else 0
+
         for cam_name in self.camera_names:
-            image_freq = 1 / dt_helper(getattr(self, f'{cam_name}_timestamps'))
-            print(f'{cam_name} {image_freq=:.2f}')
+            if len(self.debug_timestamps[cam_name]) > 1:
+                image_freq = 1 / dt_helper(self.debug_timestamps[cam_name])
+                print(f"{cam_name}: {image_freq:.2f} Hz")
         print()
 
 class Recorder:
-    def __init__(self, side, init_node=True, is_debug=False):
-        from collections import deque
-        import rospy
-        from sensor_msgs.msg import JointState
-        from interbotix_xs_msgs.msg import JointGroupCommand, JointSingleCommand
+    def __init__(self, init_node=True, is_debug=False):
+        self.is_debug = is_debug
+        self.lock = threading.Lock()
 
         self.secs = None
         self.nsecs = None
@@ -87,59 +92,88 @@ class Recorder:
         self.arm_command = None
         self.gripper_force = None
         self.gripper_command = None
-        self.gripper_state = None
-        self.is_debug = is_debug
-
-        #待启动：FanucPub(robot_state)、FanucCmd(robot_cmd#TODO)、gripper_controller(gripper_state、gripper_pos)、gripper_cmd#TODO、camera_pub
+        self.gripper_pos = None
 
         if init_node:
             rospy.init_node('recorder', anonymous=True)
-        rospy.Subscriber(f"/robot_state'", Float64MultiArray, self.puppet_state_cb)
-        rospy.Subscriber(f"/robot_cmd", JointGroupCommand, self.puppet_arm_commands_cb) #TODO
-        rospy.Subscriber(f"/gripper_state", Int32, self.puppet_gripper_force_cb)
-        rospy.Subscriber(f"/gripper_state", Float64, self.puppet_gripper_state_cb)
-        rospy.Subscriber(f"/gripper_cmd", JointSingleCommand, self.puppet_gripper_commands_cb) #TODO
+            self.fanuc_controller=FanucController()
 
+        # 订阅 ROS 话题
+        rospy.Subscriber("/robot_state", Float64MultiArray, self.puppet_state_cb)
+        rospy.Subscriber("/robot_cmd", Float64MultiArray, self.puppet_arm_commands_cb)
+        rospy.Subscriber("/gripper_force", Int32, self.puppet_gripper_force_cb)
+        rospy.Subscriber("/gripper_pos", Float64, self.puppet_gripper_pos_cb)
+
+        # 调试用时间戳
         if self.is_debug:
             self.joint_timestamps = deque(maxlen=50)
             self.arm_command_timestamps = deque(maxlen=50)
             self.gripper_command_timestamps = deque(maxlen=50)
-        time.sleep(0.1)
+
+        # 启动监听线程
+        self.running = True
+        self.thread = threading.Thread(target=self.listen_loop)
+        self.thread.daemon = True
+        self.thread.start()
 
     def puppet_state_cb(self, data):
-        self.qpos = data
-        #self.qvel = data.velocity
-        #self.effort = data.effort
+        """订阅机器人状态"""
+        with self.lock:
+            self.qpos = data.data
         if self.is_debug:
             self.joint_timestamps.append(time.time())
 
     def puppet_arm_commands_cb(self, data):
-        self.arm_command = data
+        """订阅手臂命令"""
+        with self.lock:
+            self.fanuc_controller(data.data)
         if self.is_debug:
             self.arm_command_timestamps.append(time.time())
 
     def puppet_gripper_force_cb(self, data):
-        self.gripper_force = data
+        """订阅夹爪力"""
+        with self.lock:
+            self.gripper_force = data.data
 
-    def puppet_gripper_state_cb(self, data):
-        self.gripper_state = data
+    def puppet_gripper_pos_cb(self, data):
+        """订阅夹爪位置"""
+        with self.lock:
+            self.gripper_pos=data.data
 
-    def puppet_gripper_commands_cb(self, data):
-        self.gripper_command = data
-        if self.is_debug:
-            self.gripper_command_timestamps.append(time.time())
+    def listen_loop(self):
+        rate = rospy.Rate(50)  # 50Hz 更新
+        try:
+            while self.running and not rospy.is_shutdown():
+                rate.sleep()
+        except KeyboardInterrupt:
+            print(f"\n[INFO] {self.__class__.__name__} stopped by Ctrl+C.")
+            self.running = False
+
+    def stop(self):
+        """停止监听线程"""
+        self.running = False
+        self.thread.join()
 
     def print_diagnostics(self):
-        def dt_helper(l):
-            l = np.array(l)
-            diff = l[1:] - l[:-1]
-            return np.mean(diff)
+        """打印状态更新频率"""
+        def dt_helper(timestamps):
+            ts = np.array(timestamps)
+            return np.mean(ts[1:] - ts[:-1]) if len(ts) > 1 else 0
 
-        joint_freq = 1 / dt_helper(self.joint_timestamps)
-        arm_command_freq = 1 / dt_helper(self.arm_command_timestamps)
-        gripper_command_freq = 1 / dt_helper(self.gripper_command_timestamps)
+        if self.is_debug:
+            if len(self.joint_timestamps) > 1:
+                joint_freq = 1 / dt_helper(self.joint_timestamps)
+                print(f'Joint States: {joint_freq:.2f} Hz')
 
-        print(f'{joint_freq=:.2f}\n{arm_command_freq=:.2f}\n{gripper_command_freq=:.2f}\n')
+            if len(self.arm_command_timestamps) > 1:
+                arm_command_freq = 1 / dt_helper(self.arm_command_timestamps)
+                print(f'Arm Commands: {arm_command_freq:.2f} Hz')
+
+            if len(self.gripper_command_timestamps) > 1:
+                gripper_command_freq = 1 / dt_helper(self.gripper_command_timestamps)
+                print(f'Gripper Commands: {gripper_command_freq:.2f} Hz')
+
+            print()
 
 def get_arm_joint_positions(bot):
     return bot.arm.core.joint_states.position[:6]
@@ -147,25 +181,6 @@ def get_arm_joint_positions(bot):
 def get_arm_gripper_positions(bot):
     joint_position = bot.gripper.core.joint_states.position[6]
     return joint_position
-
-def move_arms(bot_list, target_pose_list, move_time=1):
-    num_steps = int(move_time / DT)
-    curr_pose_list = [get_arm_joint_positions(bot) for bot in bot_list]
-    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in zip(curr_pose_list, target_pose_list)]
-    for t in range(num_steps):
-        for bot_id, bot in enumerate(bot_list):
-            bot.arm.set_joint_positions(traj_list[bot_id][t], blocking=False)
-        time.sleep(DT)
-
-def move_grippers(bot_list, target_pose_list, move_time):
-    num_steps = int(move_time / DT)
-    curr_pose_list = [get_arm_gripper_positions(bot) for bot in bot_list]
-    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in zip(curr_pose_list, target_pose_list)]
-    for t in range(num_steps):
-        for bot_id, bot in enumerate(bot_list):
-            gripper_command = traj_list[bot_id][t]
-            bot.gripper.core.pub_single.publish(gripper_command)
-        time.sleep(DT)
 
 def setup_puppet_bot(bot):
     bot.dxl.robot_reboot_motors("single", "gripper", True)

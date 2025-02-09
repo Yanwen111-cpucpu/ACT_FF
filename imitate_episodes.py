@@ -185,7 +185,6 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     # load environment
     if real_robot:
-        from real_fanuc.robot_utils import move_grippers # requires aloha
         from real_fanuc.real_env import make_real_env # requires aloha
         env = make_real_env(init_node=True) #env中需要有：
         env_max_reward = 0
@@ -308,7 +307,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
             # len(joint_traj) i.e. actions: max_timesteps
             # len(episode_replay) i.e. time steps: max_timesteps + 1
 
-            joint_traj = [ts.observation['arm_gripper_ctrl'][:7].copy() for ts in episode]
+            joint_traj = [ts.observation['qpos'][:7].copy() for ts in episode]
             max_timesteps = len(joint_traj)
             while joint_traj:
                 action = joint_traj.pop(0)
@@ -316,7 +315,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 data_dict['/observations/qpos'].append(ts.observation['qpos'])
                 data_dict['/observations/qvel'].append(ts.observation['qvel'])
                 data_dict['/observations/force'].append(ts.observation['c_force'])
-                data_dict['/action'].append(action)
+                #data_dict['/action'].append(action)
 
                 for cam_name in camera_names:
                     data_dict[f'/observations/images/{cam_name}'].append(ts.observation['images'][cam_name])
@@ -335,10 +334,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
                                             chunks=(1, 480, 640, 3), )
                 # compression='gzip',compression_opts=2,)
                 # compression=32001, compression_opts=(0, 0, 0, 0, 9, 1, 1), shuffle=False)
-                qpos = obs.create_dataset('qpos', (max_timesteps, 14))
-                qvel = obs.create_dataset('qvel', (max_timesteps, 14))
+                qpos = obs.create_dataset('qpos', (max_timesteps, 7))
+                qvel = obs.create_dataset('qvel', (max_timesteps, 7))
                 force = obs.create_dataset('force',(max_timesteps,1))
-                action = root.create_dataset('action', (max_timesteps,7))
+                #action = root.create_dataset('action', (max_timesteps,7))
 
                 for name, array in data_dict.items():
                     if name not in root:
@@ -352,9 +351,6 @@ def eval_bc(config, ckpt_name, save_episode=True):
             print(f'Saved to {dataset_dir}')
 
             plt.close()
-        if real_robot:
-            move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
-            pass
 
         rewards = np.array(rewards)
         episode_return = np.sum(rewards[rewards!=None])
