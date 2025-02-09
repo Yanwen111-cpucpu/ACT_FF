@@ -1,7 +1,7 @@
 
 <mujocoinclude>
 
-    <body name="vx300s_right" pos="2 2 0" euler="0 0 3.1416">
+    <body name="vx300s_right" pos="10 10 0" euler="0 0 3.1416">
         <geom quat="0.707107 0 0 0.707107" type="mesh" mesh="vx300s_1_base" name="vx300s_right/1_base" contype="0" conaffinity="0" rgba="0 0 0 1"/>
         <body name="vx300s_right/shoulder_link" pos="0 0 0.079">
             <inertial pos="0.000259233 -3.3552e-06 0.0116129" quat="-0.476119 0.476083 0.52279 0.522826" mass="1e-5" diaginertia="0.00120156 0.00113744 0.0009388" />
