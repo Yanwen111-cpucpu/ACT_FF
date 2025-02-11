@@ -1,5 +1,6 @@
 import rospy
 import cv2
+import numpy as np
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 
@@ -48,6 +49,7 @@ class CameraSubscriber:
                     cv2.imshow(self.windows[serial], image)
             cv2.waitKey(1)  # 确保窗口刷新
             rate.sleep()
+
         cv2.destroyAllWindows()
 
 
@@ -55,6 +57,7 @@ def main():
     serials = ['332322070892', '332522076772']  # 替换为实际相机序列号
     sub = CameraSubscriber(serials)
     sub.show_images()
-
+    
+    
 if __name__ == '__main__':
     main()

@@ -50,7 +50,7 @@ def render_simulation():
     pygame.display.set_caption("MuJoCo Simulation with Pygame")
 
     # 加载修改后的 MuJoCo XML
-    mode = 2  # 选择模式 1, 2, 3
+    mode = 3  # 选择模式 1, 2, 3
     modified_xml = modify_mujoco_xml(mode)
     physics = mujoco.Physics.from_xml_path(modified_xml)
 

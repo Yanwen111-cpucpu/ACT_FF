@@ -34,14 +34,14 @@ def main(args):
     batch_size_train = args['batch_size']
     batch_size_val = args['batch_size']
     num_epochs = args['num_epochs']
+    is_sim = args['is_sim']
 
     # get task parameters
-    is_sim = task_name[:4] == 'sim_'
     if is_sim:
         from constants import SIM_TASK_CONFIGS
         task_config = SIM_TASK_CONFIGS[task_name]
     else:
-        from real_fanuc.constants_real import TASK_CONFIGS
+        from src.act_ff.scripts.constants_real import TASK_CONFIGS
         task_config = TASK_CONFIGS[task_name]
     dataset_dir = task_config['dataset_dir']
     num_episodes = task_config['num_episodes']
@@ -185,7 +185,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     # load environment
     if real_robot:
-        from real_fanuc.real_env import make_real_env # requires aloha
+        from src.act_ff.scripts.real_env import make_real_env # requires aloha
         env = make_real_env(init_node=True) #env中需要有：
         env_max_reward = 0
     else:
@@ -218,8 +218,15 @@ def eval_bc(config, ckpt_name, save_episode=True):
         ### onscreen render
         if onscreen_render:
             ax = plt.subplot()
-            plt_img = ax.imshow(env._physics.render(height=480, width=640, camera_id=onscreen_cam))
+            if real_robot:
+                import cv2
+                img = ts.observation['images']['top']
+                img_rgb = img[:, :, [2, 1, 0]]  # 交换 BGR -> RGB
+                plt_img = ax.imshow(img_rgb)
+            else:
+                plt_img = ax.imshow(env._physics.render(height=480, width=640, camera_id=onscreen_cam))
             plt.ion()
+
 
         ### evaluation loop
         if temporal_agg:
@@ -232,62 +239,71 @@ def eval_bc(config, ckpt_name, save_episode=True):
         target_qpos_list = []
         rewards = []
         with torch.inference_mode():
-            for t in range(max_timesteps):
-                ### update onscreen render and wait for DT
-                if onscreen_render:
-                    image = env._physics.render(height=480, width=640, camera_id=onscreen_cam)
-                    plt_img.set_data(image)
-                    plt.pause(DT)
+            try:
+                for t in range(max_timesteps):
+                    ### update onscreen render and wait for DT
+                    if onscreen_render:
+                        if real_robot:
+                            image = ts.observation['images']['top']
+                            image = img[:, :, [2, 1, 0]]  # 交换 BGR -> RGB
+                        else:
+                            image = env._physics.render(height=480, width=640, camera_id=onscreen_cam)
+                        plt_img.set_data(image)
+                        plt.pause(DT)
 
-                ### process previous timestep to get qpos and image_list
-                obs = ts.observation
-                if 'images' in obs:
-                    image_list.append(obs['images'])
-                else:
-                    image_list.append({'main': obs['image']})
-                qpos_numpy = np.array(obs['qpos'])
-                qpos = pre_process(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().to('cpu').unsqueeze(0)
-                qpos_history[:, t] = qpos
-                curr_image = get_image(ts, camera_names)
-                force_numpy = np.array(obs['c_force'])
-                force = pre_process_force(force_numpy)
-                force = torch.from_numpy(force).float().to('cpu').unsqueeze(0)
-                force_history[:, t] = force
-                ### query policy
-                if config['policy_class'] == "ACT":
-                    if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image,force)
-                    if temporal_agg:
-                        all_time_actions[[t], t:t+num_queries] = all_actions
-                        actions_for_curr_step = all_time_actions[:, t]
-                        actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
-                        actions_for_curr_step = actions_for_curr_step[actions_populated]
-                        k = 0.01
-                        exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
-                        exp_weights = exp_weights / exp_weights.sum()
-                        exp_weights = torch.from_numpy(exp_weights).to('cpu').unsqueeze(dim=1)
-                        raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
+                    ### process previous timestep to get qpos and image_list
+                    obs = ts.observation
+                    if 'images' in obs:
+                        image_list.append(obs['images'])
                     else:
-                        raw_action = all_actions[:, t % query_frequency]
-                elif config['policy_class'] == "CNNMLP":
-                    raw_action = policy(qpos, curr_image)
-                else:
-                    raise NotImplementedError
+                        image_list.append({'main': obs['image']})
+                    qpos_numpy = np.array(obs['qpos'])
+            
+                    qpos = pre_process(qpos_numpy)
+                    qpos = torch.from_numpy(qpos).float().to('cpu').unsqueeze(0)
+                    qpos_history[:, t] = qpos
+                    curr_image = get_image(ts, camera_names)
+                    force_numpy = np.array(obs['c_force'])
+                    force = pre_process_force(force_numpy)
+                    force = torch.from_numpy(force).float().to('cpu').unsqueeze(0)
+                    force_history[:, t] = force
+                    ### query policy
+                    if config['policy_class'] == "ACT":
+                        if t % query_frequency == 0:
+                            all_actions = policy(qpos, curr_image,force)
+                        if temporal_agg:
+                            all_time_actions[[t], t:t+num_queries] = all_actions
+                            actions_for_curr_step = all_time_actions[:, t]
+                            actions_populated = torch.all(actions_for_curr_step != 0, axis=1)
+                            actions_for_curr_step = actions_for_curr_step[actions_populated]
+                            k = 0.01
+                            exp_weights = np.exp(-k * np.arange(len(actions_for_curr_step)))
+                            exp_weights = exp_weights / exp_weights.sum()
+                            exp_weights = torch.from_numpy(exp_weights).to('cpu').unsqueeze(dim=1)
+                            raw_action = (actions_for_curr_step * exp_weights).sum(dim=0, keepdim=True)
+                        else:
+                            raw_action = all_actions[:, t % query_frequency]
+                    elif config['policy_class'] == "CNNMLP":
+                        raw_action = policy(qpos, curr_image)
+                    else:
+                        raise NotImplementedError
 
-                ### post-process actions
-                raw_action = raw_action.squeeze(0).cpu().numpy()
-                action = post_process(raw_action)
-                
-                target_qpos = action
-                print(f'sent action:{target_qpos}')
-                ### step the environment
-                ts = env.step(target_qpos)
-                episode.append(ts)
-                ### for visualization
-                qpos_list.append(qpos_numpy)
-                target_qpos_list.append(target_qpos)
-                rewards.append(ts.reward)
+                    ### post-process actions
+                    raw_action = raw_action.squeeze(0).cpu().numpy()
+                    action = post_process(raw_action)
+                    
+                    target_qpos = action
+                    print(f'sent action:{target_qpos}')
+                    ### step the environment
+                    ts = env.step(target_qpos)
+                    episode.append(ts)
+                    ### for visualization
+                    qpos_list.append(qpos_numpy)
+                    target_qpos_list.append(target_qpos)
+                    rewards.append(ts.reward)
+            except KeyboardInterrupt:
+                print("Stopping evaluation...")
+                exit(0)  # 退出 Python 进程
 
             # data recording to hdf5
             data_dict = {
@@ -503,5 +519,6 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
+    parser.add_argument('--is_sim', action='store_true',required=False)
     
     main(vars(parser.parse_args()))

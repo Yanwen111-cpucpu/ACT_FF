@@ -2,6 +2,7 @@
 import minimalmodbus
 import serial
 import time
+import struct
 
 def test_gripper():
     device_address = 1
@@ -49,6 +50,19 @@ def test_gripper():
         states = {0: "At position", 1: "Moving", 2: "Holding object", 3: "Dropped object"}
         print(f"Gripper state: {states.get(status, 'Unknown')}" )
         
+        # 🔥 设置夹爪目标位置：25mm
+        position = 50  # 25mm
+        ieee754_bytes = struct.pack('>f', position)  # 转换成 IEEE 754 4 字节
+        high_word, low_word = struct.unpack('>HH', ieee754_bytes)  # 拆分高16位和低16位
+
+        # 发送目标位置
+        instrument.write_registers(0x0002, [high_word, low_word])
+        time.sleep(1)  # 等待执行
+        pos_data = instrument.read_registers(0x0042, 2)
+        pos_bytes = struct.pack('>HH', pos_data[0], pos_data[1])
+        position = struct.unpack('>f', pos_bytes)[0]
+        print(f"Gripper moved to {position:.3f} mm")
+
     except Exception as e:
         print(f"Error during gripper test: {e}")
 

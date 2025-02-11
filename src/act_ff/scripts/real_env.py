@@ -8,11 +8,11 @@ import rospy
 from constants import DT, START_ARM_POSE, MASTER_GRIPPER_JOINT_NORMALIZE_FN, PUPPET_GRIPPER_JOINT_UNNORMALIZE_FN
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN, PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
 from constants import PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
-from robot_utils import Recorder, ImageRecorder
-from robot_utils import setup_master_bot, setup_puppet_bot
-from fanuc_controller import FanucCmd,FanucPub
-from gripper_controller import GripperController
-from cam_pub import RealSenseCamera
+from src.act_ff.scripts.robot_utils import Recorder, ImageRecorder
+from src.act_ff.scripts.robot_utils import setup_master_bot, setup_puppet_bot
+from src.act_ff.scripts.fanuc_controller import FanucController,FanucPub
+from src.act_ff.scripts.gripper_controller import GripperController
+from src.act_ff.scripts.cam_pub import RealSenseCamera
 from std_msgs.msg import Float64MultiArray, Float64, Int32
 
 import IPython
@@ -44,19 +44,20 @@ class RealEnv:
 
         if init_node:
             rospy.init_node('real_env', anonymous=True)
-            self.recorder= Recorder(init_node=True)
-            self.image_recorder = ImageRecorder(init_node=True)
+        self.recorder= Recorder(init_node=False)
+        self.image_recorder = ImageRecorder(init_node=False)
         
         self.gripper_cmd=rospy.Publisher('/gripper_cmd', Float64, queue_size=10)
         self.fanuc_cmd=rospy.Publisher('/robot_cmd', Float64MultiArray, queue_size=10)
 
-
+        self.msg_fanuc=Float64MultiArray()
+        self.msg_gripper=Float64()
 
     def get_qpos(self):
         left_qpos_raw = self.recorder.qpos
         left_arm_qpos = left_qpos_raw[:6]
         left_gripper_pos = self.recorder.gripper_pos
-        return np.concatenate([left_arm_qpos, left_gripper_pos])
+        return np.concatenate([left_arm_qpos, np.array([left_gripper_pos])])
 
     def get_qvel(self):
         left_qvel_raw = self.recorder_left.qvel
@@ -82,21 +83,25 @@ class RealEnv:
 
     def _reset_joints(self):
         reset_position = START_ARM_POSE[:6]
-        self.fanuc_cmd.publish(reset_position)
+        self.msg_fanuc.data=reset_position
+        self.fanuc_cmd.publish(self.msg_fanuc)
 
     def _reset_gripper(self):
         """Set to position mode and do position resets: first open then close. Then change back to PWM mode"""
-        self.gripper_cmd.publish(0)
+        self.msg_gripper.data=0
+        self.gripper_cmd.publish(self.msg_gripper)
         time.sleep(1)
-        self.gripper_cmd.publish(0.025)
+        self.msg_gripper.data=0.025
+        self.gripper_cmd.publish(self.msg_gripper)
         
 
     def get_observation(self):
         obs = collections.OrderedDict()
-        obs['qpos'] = self.get_qpos()
+        qpos = self.get_qpos()
+        obs['qpos'] = np.concatenate([qpos, np.zeros(7)])
         obs['qvel'] = None
         #obs['effort'] = self.get_effort()
-        obs['c_force'] = self.get_force()
+        obs['c_force'] = np.array([self.get_force()])
         obs['images'] = self.get_images()
         return obs
 
@@ -114,9 +119,12 @@ class RealEnv:
             observation=self.get_observation())
 
     def step(self, action):
+        
+        self.msg_fanuc.data=action[:6]
+        self.msg_gripper.data=action[-1]
 
-        self.fanuc_cmd.publish(action[:6])
-        self.gripper_cmd.publish(action[-1])
+        self.fanuc_cmd.publish(self.msg_fanuc)
+        self.gripper_cmd.publish(self.msg_gripper)
 
         time.sleep(DT) #if too slow, get this bigger
 
@@ -139,8 +147,8 @@ def get_action(master_bot_left, master_bot_right):
     return action
 
 
-def make_real_env(init_node, setup_robots=True):
-    env = RealEnv(init_node, setup_robots)
+def make_real_env(init_node):
+    env = RealEnv(init_node)
     return env
 
 
@@ -157,14 +165,6 @@ def test_real_teleop():
 
     onscreen_render = True
     render_cam = 'cam_left_wrist'
-
-    # source of data
-    master_bot_left = InterbotixManipulatorXS(robot_model="wx250s", group_name="arm", gripper_name="gripper",
-                                              robot_name=f'master_left', init_node=True)
-    master_bot_right = InterbotixManipulatorXS(robot_model="wx250s", group_name="arm", gripper_name="gripper",
-                                               robot_name=f'master_right', init_node=False)
-    setup_master_bot(master_bot_left)
-    setup_master_bot(master_bot_right)
 
     # setup the environment
     env = make_real_env(init_node=False)

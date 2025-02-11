@@ -7,7 +7,7 @@ from std_msgs.msg import Float64MultiArray, Float64, Int32
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from constants import DT
-from fanuc_controller import FanucController
+from src.act_ff.scripts.fanuc_controller import FanucController
 
 class ImageRecorder:
     def __init__(self, init_node=True, is_debug=False):
@@ -96,7 +96,7 @@ class Recorder:
 
         if init_node:
             rospy.init_node('recorder', anonymous=True)
-            self.fanuc_controller=FanucController()
+        self.fanuc_controller=FanucController()
 
         # 订阅 ROS 话题
         rospy.Subscriber("/robot_state", Float64MultiArray, self.puppet_state_cb)
@@ -126,7 +126,7 @@ class Recorder:
     def puppet_arm_commands_cb(self, data):
         """订阅手臂命令"""
         with self.lock:
-            self.fanuc_controller(data.data)
+            self.fanuc_controller.send_udp_data(data.data)
         if self.is_debug:
             self.arm_command_timestamps.append(time.time())
 
@@ -208,3 +208,21 @@ def torque_off(bot):
 def torque_on(bot):
     bot.dxl.robot_torque_enable("group", "arm", True)
     bot.dxl.robot_torque_enable("single", "gripper", True)
+
+def main():
+    rospy.init_node("robot_controller", anonymous=True)
+    recorder = Recorder(init_node=False)  # 这里设为 False
+    pub = rospy.Publisher('/robot_cmd', Float64MultiArray, queue_size=10)
+    rospy.sleep(0.1)  # 确保 publisher 注册成功
+
+    msg = Float64MultiArray()
+    msg.data = [0, 0, 0, 0, -1.57, 0]
+
+    rate = rospy.Rate(50)  # 10 Hz
+    while not rospy.is_shutdown():
+        pub.publish(msg)
+        rospy.loginfo(f"Sent command: {msg.data}")
+        rate.sleep()
+
+if __name__ == "__main__":
+    main()

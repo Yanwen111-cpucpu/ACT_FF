@@ -65,10 +65,13 @@ class FanucPub:
         rospy.loginfo(f'Listening for UDP messages on {self.local_ip}:{self.port}')
     
     def receive_udp_message(self):
+        
         while not rospy.is_shutdown():
+            
             try:
                 data, _ = self.sock.recvfrom(36 * 8)
                 if len(data) == 36 * 8:
+                    
                     unpacked_data = struct.unpack('<36d', data)
                     data_array = np.array(unpacked_data[18:24])
                     msg = Float64MultiArray()
@@ -78,6 +81,7 @@ class FanucPub:
                 else:
                     rospy.logwarn(f'Incomplete data received: {len(data)} bytes')
             except socket.timeout:
+                print("timeout")
                 pass
             except struct.error as e:
                 rospy.logerr(f'Error unpacking data: {e}')

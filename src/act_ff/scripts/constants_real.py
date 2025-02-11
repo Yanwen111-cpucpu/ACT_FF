@@ -3,7 +3,7 @@ import pathlib
 ### Task parameters
 DATA_DIR = 'data'
 TASK_CONFIGS = {
-    'telepolicy' :{
+    'sim_telepolicy' :{
         'dataset_dir': DATA_DIR + '/sim_telepolicy',
         'num_episodes': 83,
         'episode_len': 500,

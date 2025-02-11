@@ -16,11 +16,15 @@ class ROSLauncher:
         self.fanuc_controller = None
         self.gripper_controller = None
 
+    
+
     def start_cameras(self):
         """ 启动所有 RealSense 相机 """
+        from pyrealsense2 import camera_info
         from pyrealsense2 import context
         ctx = context()
-        serials = [dev.get_info(2) for dev in ctx.query_devices()]  # 获取所有相机序列号
+        serials = [dev.get_info(camera_info.serial_number) for dev in ctx.query_devices()]  # 获取所有相机序列号
+
 
         if not serials:
             rospy.logerr("❌ No Intel RealSense devices found!")

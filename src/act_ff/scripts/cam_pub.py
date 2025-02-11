@@ -27,7 +27,7 @@ class RealSenseCamera:
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_device(serial)
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 25)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
         self.pipeline.start(config)
         rospy.loginfo(f'RealSense Camera {serial} started, publishing to camera_{cam_name}/image_raw')
