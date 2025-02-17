@@ -32,7 +32,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             with h5py.File(dataset_path, 'r') as root:
                 is_sim = root.attrs['sim']
                 original_action_shape = root['/action'].shape
-                episode_len = 420 #hardcode
+                episode_len = 500 #hardcode
                 #print(f"episode_len of {episode_id}:{episode_len}")
                 if sample_full_episode:
                     start_ts = 0

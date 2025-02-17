@@ -1,7 +1,7 @@
 import pathlib
 
 ### Task parameters
-DATA_DIR = 'data'
+DATA_DIR = '../sim_data'
 SIM_TASK_CONFIGS = {
     'sim_transfer_cube_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_scripted',
@@ -31,8 +31,8 @@ SIM_TASK_CONFIGS = {
         'camera_names': ['top']
     },
     'sim_telepolicy' :{
-        'dataset_dir': DATA_DIR + '/sim_telepolicy',
-        'num_episodes': 83,
+        'dataset_dir': DATA_DIR + '/sim_telemode3',
+        'num_episodes': 60,
         'episode_len': 500,
         'camera_names': ['top','gripper_top']
     }
